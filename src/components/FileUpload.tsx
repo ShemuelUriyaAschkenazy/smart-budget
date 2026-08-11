@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { processUploadedFile, TransactionRow } from '@/app/actions/parse-file';
+import { processUploadedFile, TransactionRow } from '../app/actions/parse-file';
 
 interface FileUploadProps {
   onDataParsed: (data: TransactionRow[]) => void;

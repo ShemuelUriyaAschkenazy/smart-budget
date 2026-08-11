@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import FileUpload from '@/components/FileUpload';
-import TransactionsTable from '@/components/TransactionsTable';
-import { TransactionRow } from '@/app/actions/parse-file';
+import FileUpload from '../components/FileUpload';
+import TransactionsTable from '../components/TransactionsTable';
+import { TransactionRow } from './actions/parse-file';
 
 export default function Home() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);

@@ -1,6 +1,6 @@
 'use client';
 
-import { TransactionRow } from '@/app/actions/parse-file';
+import { TransactionRow } from '../app/actions/parse-file';
 
 interface TableProps {
   transactions: TransactionRow[];
