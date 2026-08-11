@@ -1,0 +1,53 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// קטגוריות תקציב וכיסי ביט
+model Category {
+  id             Int                 @id @default(autoincrement())
+  name           String              @unique
+  type           String              // 'expense' (הוצאה) או 'saving_bit' (כיס ביט)
+  expectedAmount Decimal             @default(0) // יעד חודשי
+  currentBalance Decimal             @default(0) // רלוונטי לכיסי ביט בלבד
+  transactions   Transaction[]
+  aiRules        AIRule[]
+}
+
+// תנועות מתוך קבצי הבנק/אשראי/ביט
+model Transaction {
+  id          Int       @id @default(autoincrement())
+  date        DateTime
+  description String
+  amount      Decimal
+  source      String    // 'Discount', 'Max', 'Bit Manual'
+  monthKey    String    // '2026-08'
+  isConfirmed Boolean   @default(false)
+  
+  categoryId  Int?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+}
+
+// חוקים קשיחים והנחיות ל-AI
+model AIRule {
+  id              Int       @id @default(autoincrement())
+  ruleType        String    // 'exact_match' או 'prompt_instruction'
+  pattern         String?   // רלוונטי ל-exact_match
+  instructionText String?   // הנחיה בטקסט חופשי ל-Gemini
+  validUntil      DateTime? // תוקף החוק (אופציונלי)
+  
+  categoryId      Int?
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+// Snapshots חודשיים של היסטוריית תקציב
+model MonthlySnapshot {
+  id        Int      @id @default(autoincrement())
+  monthKey  String   @unique // '2026-08'
+  data      Json     // שמירת מצב התקציב בדיוק כפי שהיה
+  createdAt DateTime @default(now())
+}
