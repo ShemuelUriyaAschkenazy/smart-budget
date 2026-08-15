@@ -1,20 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import FileUpload from '../components/FileUpload';
 import TransactionsTable from '../components/TransactionsTable';
-import { TransactionRow } from './actions/parse-file';
+import { 
+  TransactionRow, 
+  getTransactions, 
+  deleteTransactionAction, 
+  clearAllTransactionsAction 
+} from './actions/parse-file';
 
 export default function Home() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
 
-  const handleDeleteRow = (id: string) => {
+  // טעינת תנועות קיימות ממה שנשמר ב-Database
+  useEffect(() => {
+    getTransactions().then(setTransactions);
+  }, []);
+
+  const handleDeleteRow = async (id: string) => {
     setTransactions((prev) => prev.filter((item) => item.id !== id));
+    await deleteTransactionAction(id);
   };
 
-  const handleClearAll = () => {
-    if (confirm('האם אתה בטוח שברצונך למחוק את כל התנועות שהועלו?')) {
+  const handleClearAll = async () => {
+    if (confirm('האם אתה בטוח שברצונך למחוק את כל התנועות?')) {
       setTransactions([]);
+      await clearAllTransactionsAction();
     }
   };
 
@@ -27,7 +39,7 @@ export default function Home() {
         </p>
       </header>
 
-      <FileUpload onDataParsed={setTransactions} />
+      <FileUpload onDataParsed={(newData) => setTransactions((prev) => [...newData, ...prev])} />
       <TransactionsTable 
         transactions={transactions} 
         onDeleteRow={handleDeleteRow}
