@@ -111,43 +111,62 @@ export async function processUploadedFile(formData: FormData) {
     }
   });
 
-  // 1. שליפת הקטגוריות הקיימות בדאטהבייס בלבד
   const existingCategories = await prisma.category.findMany();
-  
-  // יצירת קטגוריית "ללא קטגוריה" בדאטהבייס אם היא עדיין לא קיימת
-  let defaultCategory = existingCategories.find(c => c.name === 'ללא קטגוריה');
+  const regularRules = await prisma.rule.findMany({
+    include: { category: true },
+  });
+
+  let defaultCategory = existingCategories.find((c) => c.name === 'ללא קטגוריה');
   if (!defaultCategory) {
     defaultCategory = await prisma.category.create({
-      data: { name: 'ללא קטגוריה', type: 'expense' }
+      data: { name: 'ללא קטגוריה', type: 'expense' },
     });
   }
 
-  // מיפוי שמות הקטגוריות המותרות ל-AI
-  const allowedCategories = existingCategories.map(c => c.name);
-  if (!allowedCategories.includes('ללא קטגוריה')) {
-    allowedCategories.push('ללא קטגוריה');
-  }
-
-  const categoryMap = new Map<string, string>();
-  existingCategories.forEach(c => categoryMap.set(c.name, c.id));
+  const categoryMap = new Map<string, number>();
+  existingCategories.forEach((c) => categoryMap.set(c.name, c.id));
   categoryMap.set(defaultCategory.name, defaultCategory.id);
 
-  const activeRules = await prisma.aIRule.findMany({
-    where: {
-      OR: [
-        { validUntil: null },
-        { validUntil: { gte: new Date() } }
-      ]
+  const preClassifiedItems: { date: string; description: string; amount: number; categoryId: number; categoryName: string }[] = [];
+  const unclassifiedForAI: any[] = [];
+
+  for (const row of rawRows) {
+    const matchedRule = regularRules.find((rule) =>
+      row.description.toLowerCase().includes(rule.keyword.toLowerCase())
+    );
+
+    if (matchedRule) {
+      preClassifiedItems.push({
+        date: row.date,
+        description: row.description,
+        amount: row.amount,
+        categoryId: matchedRule.categoryId,
+        categoryName: matchedRule.category.name,
+      });
+    } else {
+      unclassifiedForAI.push(row);
     }
-  });
+  }
 
-  const dynamicInstructions = activeRules
-    .filter(r => r.ruleType === 'prompt_instruction' && r.instructionText)
-    .map(r => `- ${r.instructionText}`)
-    .join('\n');
+  let aiClassifiedItems: TransactionRow[] = [];
 
-  // הנחיה קשיחה ל-AI לבחור אך ורק מהרשימה
-  const systemInstruction = `
+  if (unclassifiedForAI.length > 0) {
+    const allowedCategories = Array.from(categoryMap.keys());
+    const activeAIRules = await prisma.aIRule.findMany({
+      where: {
+        OR: [
+          { validUntil: null },
+          { validUntil: { gte: new Date() } },
+        ],
+      },
+    });
+
+    const dynamicInstructions = activeAIRules
+      .filter((r) => r.ruleType === 'prompt_instruction' && r.instructionText)
+      .map((r) => `- ${r.instructionText}`)
+      .join('\n');
+
+    const systemInstruction = `
 אתה עוזר פיננסי אישי המסווג תנועות בנק בעברית.
 אתה מורשה לבחור קטגוריה אך ורק מתוך הרשימה הסגורה הבאה:
 [${allowedCategories.join(', ')}]
@@ -157,41 +176,51 @@ ${dynamicInstructions || 'אין חוקים דינמיים כרגע.'}
 
 אם תיאור התנועה אינו מתאים בצורה ברורה לאף אחת מהקטגוריות ברשימה, בחר בדיוק ב: "ללא קטגוריה".
 אל תמציא קטגוריות חדשות בשום אופן.
-  `;
+    `;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.6-flash',
-    contents: `סווג את התנועות הבאות: ${JSON.stringify(rawRows)}`,
-    config: {
-      systemInstruction: systemInstruction,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            date: { type: Type.STRING },
-            description: { type: Type.STRING },
-            amount: { type: Type.NUMBER },
-            category: { type: Type.STRING },
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: `סווג את התנועות הבאות: ${JSON.stringify(unclassifiedForAI)}`,
+      config: {
+        systemInstruction: systemInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              date: { type: Type.STRING },
+              description: { type: Type.STRING },
+              amount: { type: Type.NUMBER },
+              category: { type: Type.STRING },
+            },
+            required: ['date', 'description', 'amount', 'category'],
           },
-          required: ['date', 'description', 'amount', 'category'],
         },
       },
-    },
-  });
+    });
 
-  const classifiedItems: TransactionRow[] = JSON.parse(response.text || '[]');
+    aiClassifiedItems = JSON.parse(response.text || '[]');
+  }
 
-  // 2. שמירת התנועות מול קטגוריות קיימות בלבד (ללא יצירת קטגוריות חדשות)
+  const allItemsToSave = [
+    ...preClassifiedItems.map((item) => ({
+      date: item.date,
+      description: item.description,
+      amount: item.amount,
+      categoryId: item.categoryId,
+    })),
+    ...aiClassifiedItems.map((item) => ({
+      date: item.date,
+      description: item.description,
+      amount: item.amount,
+      categoryId: categoryMap.get(item.category || 'ללא קטגוריה') || defaultCategory!.id,
+    })),
+  ];
+
   const savedTransactions = await Promise.all(
-    classifiedItems.map((item) => {
+    allItemsToSave.map((item) => {
       const parsedDate = parseToDate(item.date);
-      const chosenCatName = item.category || 'ללא קטגוריה';
-      
-      // אם ה-AI החזיר קטגוריה שאינה ברשימה, נחזיר אותה ל-"ללא קטגוריה"
-      const categoryId = categoryMap.get(chosenCatName) || defaultCategory!.id;
-
       return prisma.transaction.create({
         data: {
           date: parsedDate,
@@ -199,7 +228,7 @@ ${dynamicInstructions || 'אין חוקים דינמיים כרגע.'}
           amount: item.amount,
           source: sourceName,
           monthKey: getMonthKey(parsedDate),
-          categoryId: categoryId,
+          categoryId: item.categoryId,
         },
         include: {
           category: true,

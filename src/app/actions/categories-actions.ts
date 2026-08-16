@@ -7,14 +7,16 @@ export interface CategoryItem {
   id: string;
   name: string;
   type: string;
+  expectedAmount?: number | null;
+  currentBalance?: number | null;
   _count?: {
     transactions: number;
   };
 }
 
-// שליפת כל הקטגוריות כולל ספירת תנועות מקושרות
+// שליפת הקטגוריות והמרת שדות Decimal למספרים רגילים
 export async function getCategories(): Promise<CategoryItem[]> {
-  return await prisma.category.findMany({
+  const categories = await prisma.category.findMany({
     orderBy: { name: 'asc' },
     include: {
       _count: {
@@ -22,9 +24,17 @@ export async function getCategories(): Promise<CategoryItem[]> {
       },
     },
   });
+
+  return categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    type: c.type,
+    expectedAmount: c.expectedAmount ? Number(c.expectedAmount) : null,
+    currentBalance: c.currentBalance ? Number(c.currentBalance) : null,
+    _count: c._count,
+  }));
 }
 
-// הוספת קטגוריה חדשה
 export async function createCategoryAction(name: string, type: 'expense' | 'income') {
   if (!name.trim()) throw new Error('שם הקטגוריה אינו יכול להיות ריק');
 
@@ -44,10 +54,10 @@ export async function createCategoryAction(name: string, type: 'expense' | 'inco
   });
 
   revalidatePath('/categories');
+  revalidatePath('/rules');
   revalidatePath('/');
 }
 
-// מחיקת קטגוריה עם הגנה על קטגוריות מקושרות
 export async function deleteCategoryAction(id: string) {
   const category = await prisma.category.findUnique({
     where: { id },
@@ -62,7 +72,6 @@ export async function deleteCategoryAction(id: string) {
     throw new Error('הקטגוריה לא נמצאה');
   }
 
-  // בדיקה מפורשת האם יש תנועות מקושרות
   if (category._count.transactions > 0) {
     throw new Error(
       `לא ניתן למחוק את הקטגוריה "${category.name}" מכיוון שהיא מקושרת ל-${category._count.transactions} תנועות קיימות.`
@@ -74,5 +83,6 @@ export async function deleteCategoryAction(id: string) {
   });
 
   revalidatePath('/categories');
+  revalidatePath('/rules');
   revalidatePath('/');
 }

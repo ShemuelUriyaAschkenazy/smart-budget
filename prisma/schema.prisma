@@ -7,15 +7,22 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// קטגוריות תקציב וכיסי ביט
 model Category {
-  id             Int                 @id @default(autoincrement())
-  name           String              @unique
-  type           String              // 'expense' (הוצאה) או 'saving_bit' (כיס ביט)
-  expectedAmount Decimal             @default(0) // יעד חודשי
-  currentBalance Decimal             @default(0) // רלוונטי לכיסי ביט בלבד
-  transactions   Transaction[]
-  aiRules        AIRule[]
+  id              Int           @id @default(autoincrement())
+  name            String        @unique
+  type            String        @default("expense")
+  expectedAmount  Decimal?
+  currentBalance  Decimal?
+  transactions    Transaction[]
+  rules           Rule[]
+}
+
+model Rule {
+  id         String   @id @default(cuid())
+  keyword    String   @unique
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
 }
 
 // תנועות מתוך קבצי הבנק/אשראי/ביט
@@ -34,14 +41,11 @@ model Transaction {
 
 // חוקים קשיחים והנחיות ל-AI
 model AIRule {
-  id              Int       @id @default(autoincrement())
-  ruleType        String    // 'exact_match' או 'prompt_instruction'
-  pattern         String?   // רלוונטי ל-exact_match
-  instructionText String?   // הנחיה בטקסט חופשי ל-Gemini
-  validUntil      DateTime? // תוקף החוק (אופציונלי)
-  
-  categoryId      Int?
-  category        Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  ruleType        String    @default("prompt_instruction")
+  instructionText String?
+  validUntil      DateTime?
+  createdAt       DateTime  @default(now())
 }
 
 // Snapshots חודשיים של היסטוריית תקציב
