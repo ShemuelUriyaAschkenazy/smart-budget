@@ -76,6 +76,22 @@ export async function clearAllTransactionsAction() {
   revalidatePath('/');
 }
 
+// עדכון קטגוריית תנועה קיימת
+export async function updateTransactionCategoryAction(transactionId: string, categoryName: string) {
+  const category = await prisma.category.findUnique({
+    where: { name: categoryName },
+  });
+
+  if (!category) throw new Error('הקטגוריה שנבחרה אינה קיימת');
+
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { categoryId: category.id },
+  });
+
+  revalidatePath('/');
+}
+
 export async function processUploadedFile(formData: FormData) {
   const file = formData.get('file') as File;
   const sourceName = (formData.get('source') as string) || 'בנק הפועלים';

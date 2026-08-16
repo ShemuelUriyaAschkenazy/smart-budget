@@ -9,7 +9,7 @@ export default function Navbar() {
   const navItems = [
     { label: '📊 תנועות וסיווג', href: '/' },
     { label: '🏷️ ניהול קטגוריות', href: '/categories' },
-    { label: '⚙️ חוקי AI', href: '/rules' },
+    { label: '⚙️ חוקי סיווג', href: '/rules' },
   ];
 
   return (

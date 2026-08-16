@@ -7,13 +7,13 @@ import {
   TransactionRow, 
   getTransactions, 
   deleteTransactionAction, 
-  clearAllTransactionsAction 
+  clearAllTransactionsAction,
+  updateTransactionCategoryAction
 } from './actions/parse-file';
 
 export default function Home() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
 
-  // טעינת תנועות קיימות ממה שנשמר ב-Database
   useEffect(() => {
     getTransactions().then(setTransactions);
   }, []);
@@ -30,6 +30,13 @@ export default function Home() {
     }
   };
 
+  const handleCategoryChange = async (id: string, newCategory: string) => {
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, category: newCategory } : t))
+    );
+    await updateTransactionCategoryAction(id, newCategory);
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 py-10 px-4 sm:px-8 max-w-6xl mx-auto">
       <header className="mb-8 border-b pb-4">
@@ -44,6 +51,7 @@ export default function Home() {
         transactions={transactions} 
         onDeleteRow={handleDeleteRow}
         onClearAll={handleClearAll}
+        onCategoryChange={handleCategoryChange}
       />
     </main>
   );
