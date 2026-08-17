@@ -133,23 +133,23 @@ export default function CategoriesPage() {
             </button>
           </div>
 
-          {/* הגדרת מעשר לקטגוריה */}
-          <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-            <input
-              type="checkbox"
-              id="isMaaser"
-              checked={isMaaserEligible}
-              onChange={(e) => setIsMaaserEligible(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="isMaaser" className="text-xs text-gray-700 font-semibold cursor-pointer">
-              {type === 'income'
-                ? 'נחשב כהכנסה החייבת במעשר כספים (כברירת מחדל)'
-                : type === 'donations'
-                ? 'מוכר כתרומה המקזזת מעשר כספים (כברירת מחדל)'
-                : 'כלול בחישובי מעשר'}
-            </label>
-          </div>
+          {/* הגדרת מעשר לקטגוריה - מוצג באופן ברור לפי הסוג */}
+          {(type === 'income' || type === 'donations') && (
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+              <input
+                type="checkbox"
+                id="isMaaser"
+                checked={isMaaserEligible}
+                onChange={(e) => setIsMaaserEligible(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="isMaaser" className="text-xs text-gray-700 font-semibold cursor-pointer">
+                {type === 'income'
+                  ? '🪙 סמן אם הכנסה מקטגוריה זו חייבת במעשר כספים (כברירת מחדל)'
+                  : '🪙 סמן אם תרומה מקטגוריה זו מורידה מיתרת חוב המעשר (כברירת מחדל)'}
+              </label>
+            </div>
+          )}
         </form>
       </div>
 
@@ -179,17 +179,16 @@ export default function CategoriesPage() {
                         {cat.type === 'income'
                           ? 'הכנסה'
                           : cat.type === 'savings'
-                          ? 'חיסכון'
-                          : cat.type === 'donations'
-                          ? 'תרומה'
-                          : 'הוצאה'}
+                            ? 'חיסכון'
+                            : cat.type === 'donations'
+                              ? 'תרומה'
+                              : 'הוצאה'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded ${
-                          cat.isMaaserEligible ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'
-                        }`}
+                        className={`text-xs font-bold px-2 py-0.5 rounded ${cat.isMaaserEligible ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'
+                          }`}
                       >
                         {cat.isMaaserEligible ? 'מוכר/חייב' : 'לא מחושב'}
                       </span>
@@ -197,11 +196,10 @@ export default function CategoriesPage() {
                     <td className="px-6 py-4 text-center">
                       <button
                         onClick={() => handleDelete(cat.id, cat.name)}
-                        className={`text-xs font-semibold px-3 py-1 rounded transition ${
-                          count > 0
+                        className={`text-xs font-semibold px-3 py-1 rounded transition ${count > 0
                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             : 'bg-red-50 hover:bg-red-100 text-red-600'
-                        }`}
+                          }`}
                         title={count > 0 ? 'לא ניתן למחוק קטגוריה מקושרת לתנועות' : 'מחק קטגוריה'}
                       >
                         מחק
