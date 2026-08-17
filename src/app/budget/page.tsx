@@ -128,29 +128,42 @@ export default function BudgetPage() {
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm pt-2">
           <div className="bg-white/80 p-3 rounded-lg">
             <span className="text-xs text-gray-500 block">יתרת פתיחה קודמת</span>
-            <span className="font-bold text-gray-800">₪{m.initialBalance.toFixed(2)}</span>
+            <span className="font-bold text-gray-800">
+              ₪{(m?.initialBalance ?? 0).toFixed(2)}
+            </span>
           </div>
 
           <div className="bg-white/80 p-3 rounded-lg">
-            <span className="text-xs text-gray-500 block">חיוב מעשר החודש ({m.percentage}%)</span>
-            <span className="font-bold text-amber-800">₪{m.monthMaaserObligation.toFixed(2)}</span>
+            <span className="text-xs text-gray-500 block">
+              חיוב מעשר החודש ({m?.percentage ?? 10}%)
+            </span>
+            <span className="font-bold text-amber-800">
+              ₪{(m?.monthMaaserObligation ?? 0).toFixed(2)}
+            </span>
           </div>
 
           <div className="bg-white/80 p-3 rounded-lg">
-            <span className="text-xs text-gray-500 block">תרומות שניתנו החודש</span>
-            <span className="font-bold text-emerald-700">₪{m.monthDonationsActual.toFixed(2)}</span>
+            <span className="text-xs text-gray-500 block">
+              תרומות מוכרות למעשר החודש
+            </span>
+            <span className="font-bold text-emerald-700">
+              ₪{(m?.monthMaaserEligibleDonations ?? 0).toFixed(2)}
+            </span>
           </div>
 
           <div className="bg-white p-3 rounded-lg border border-amber-300">
-            <span className="text-xs text-gray-600 font-bold block">יתרת מעשר עדכנית לתשלום</span>
+            <span className="text-xs text-gray-600 font-bold block">
+              יתרת מעשר עדכנית לתשלום
+            </span>
             <span
-              className={`text-lg font-black ${
-                m.currentCumulativeBalance > 0 ? 'text-rose-600' : 'text-emerald-600'
-              }`}
+              className={`text-lg font-black ${(m?.currentCumulativeBalance ?? 0) > 0
+                  ? 'text-rose-600'
+                  : 'text-emerald-600'
+                }`}
             >
-              {m.currentCumulativeBalance > 0
-                ? `₪${m.currentCumulativeBalance.toFixed(2)} (חוב)`
-                : `₪${Math.abs(m.currentCumulativeBalance).toFixed(2)} (זכות/תרומת יתר)`}
+              {(m?.currentCumulativeBalance ?? 0) > 0
+                ? `₪${(m?.currentCumulativeBalance ?? 0).toFixed(2)} (חוב)`
+                : `₪${Math.abs(m?.currentCumulativeBalance ?? 0).toFixed(2)} (זכות)`}
             </span>
           </div>
         </div>

@@ -49,8 +49,17 @@ export default function TransactionsTable({
     }
   };
 
+  // מנגנון שינוי מעשר עם אישור "האם אתה בטוח"
   const handleToggleMaaser = async (item: TransactionRow) => {
     if (!item.id) return;
+
+    const actionText = item.isMaaserEligible ? 'להסיר מחישוב' : 'להוסיף לחישוב';
+    const isConfirmed = confirm(
+      `האם אתה בטוח שברצונך ${actionText} המעשר את התנועה:\n"${item.description}" על סך ₪${Number(item.amount).toFixed(2)}?`
+    );
+
+    if (!isConfirmed) return;
+
     const newStatus = !item.isMaaserEligible;
     await toggleTransactionMaaserAction(item.id, newStatus);
     item.isMaaserEligible = newStatus;
@@ -110,6 +119,8 @@ export default function TransactionsTable({
           <tbody>
             {transactions.map((item) => {
               const isUncategorized = !item.category || item.category === 'ללא קטגוריה';
+              const matchedCat = categories.find((c) => c.name === item.category);
+              const showMaaserToggle = matchedCat?.type === 'income' || matchedCat?.type === 'donations';
 
               return (
                 <tr
@@ -142,17 +153,21 @@ export default function TransactionsTable({
                     </select>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <button
-                      onClick={() => handleToggleMaaser(item)}
-                      className={`text-xs font-bold px-2 py-1 rounded transition ${
-                        item.isMaaserEligible
-                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                          : 'bg-gray-100 text-gray-400'
-                      }`}
-                      title="לחץ כדי לשנות האם תנועה זו נחשבת למעשר"
-                    >
-                      {item.isMaaserEligible ? '🪙 מחושב' : 'לא מחושב'}
-                    </button>
+                    {showMaaserToggle ? (
+                      <button
+                        onClick={() => handleToggleMaaser(item)}
+                        className={`text-xs font-bold px-2.5 py-1 rounded transition border ${
+                          item.isMaaserEligible
+                            ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                            : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'
+                        }`}
+                        title="לחץ כדי לשנות האם תנועה זו מחושבת למעשר"
+                      >
+                        {item.isMaaserEligible ? '🪙 מחושב' : 'לא מחושב'}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-300">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button
