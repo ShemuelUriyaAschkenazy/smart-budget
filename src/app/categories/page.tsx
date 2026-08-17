@@ -12,7 +12,8 @@ import {
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [name, setName] = useState('');
-  const [type, setType] = useState<'expense' | 'income'>('expense');
+  const [type, setType] = useState<'expense' | 'income' | 'savings' | 'donations'>('expense');
+  const [isMaaserEligible, setIsMaaserEligible] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export default function CategoriesPage() {
     setLoading(true);
 
     try {
-      await createCategoryAction(name, type);
+      await createCategoryAction(name, type, isMaaserEligible);
       setName('');
       setSuccess('הקטגוריה נוצרה בהצלחה!');
       await loadCategories();
@@ -70,7 +71,7 @@ export default function CategoriesPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900">ניהול קטגוריות</h1>
-          <p className="text-gray-600 text-sm mt-1">הוסף, ערוך או מחק קטגוריות עבור סיווג ה-AI</p>
+          <p className="text-gray-600 text-sm mt-1">הוסף, ערוך או מחק קטגוריות והגדרות מעשר</p>
         </div>
         <Link
           href="/"
@@ -80,7 +81,6 @@ export default function CategoriesPage() {
         </Link>
       </div>
 
-      {/* הודעות שגיאה והצלחה */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 border-r-4 border-red-500 text-red-700 rounded-md shadow-sm">
           <p className="font-bold">שגיאה</p>
@@ -94,45 +94,65 @@ export default function CategoriesPage() {
         </div>
       )}
 
-      {/* טופס הוספה */}
-      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 mb-8">
-        <h2 className="text-lg font-bold mb-4 text-gray-800">הוספת קטגוריה חדשה</h2>
-        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-4 items-end">
-          <div className="flex-1 w-full">
-            <label className="block text-sm font-medium text-gray-700 mb-1">שם הקטגוריה</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="למשל: תרבות ופנאי"
-              required
-              className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 mb-8 space-y-4">
+        <h2 className="text-lg font-bold text-gray-800">הוספת קטגוריה חדשה</h2>
+        <form onSubmit={handleAdd} className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="flex-1 w-full">
+              <label className="block text-sm font-medium text-gray-700 mb-1">שם הקטגוריה</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="למשל: משכורת, תרומות מוכרות, החזרים"
+                required
+                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-          <div className="w-full sm:w-auto">
-            <label className="block text-sm font-medium text-gray-700 mb-1">סוג</label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as 'expense' | 'income')}
-              className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none bg-white"
+            <div className="w-full sm:w-auto">
+              <label className="block text-sm font-medium text-gray-700 mb-1">סוג</label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as any)}
+                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none bg-white"
+              >
+                <option value="expense">הוצאה שוטפת</option>
+                <option value="income">הכנסה</option>
+                <option value="savings">חיסכון / השקעה</option>
+                <option value="donations">תרומות ומעשרות</option>
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition disabled:opacity-50 whitespace-nowrap"
             >
-              <option value="expense">הוצאה</option>
-              <option value="income">הכנסה</option>
-            </select>
+              {loading ? 'מוסיף...' : 'הוסף קטגוריה'}
+            </button>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition disabled:opacity-50 whitespace-nowrap"
-          >
-            {loading ? 'מוסיף...' : 'הוסף קטגוריה'}
-          </button>
+          {/* הגדרת מעשר לקטגוריה */}
+          <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+            <input
+              type="checkbox"
+              id="isMaaser"
+              checked={isMaaserEligible}
+              onChange={(e) => setIsMaaserEligible(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="isMaaser" className="text-xs text-gray-700 font-semibold cursor-pointer">
+              {type === 'income'
+                ? 'נחשב כהכנסה החייבת במעשר כספים (כברירת מחדל)'
+                : type === 'donations'
+                ? 'מוכר כתרומה המקזזת מעשר כספים (כברירת מחדל)'
+                : 'כלול בחישובי מעשר'}
+            </label>
+          </div>
         </form>
       </div>
 
-      {/* רשימת הקטגוריות */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-800">רשימת קטגוריות קיימות ({categories.length})</h2>
@@ -144,7 +164,7 @@ export default function CategoriesPage() {
               <tr>
                 <th className="px-6 py-3">שם הקטגוריה</th>
                 <th className="px-6 py-3">סוג</th>
-                <th className="px-6 py-3">תנועות מקושרות</th>
+                <th className="px-6 py-3">מעשר כספים</th>
                 <th className="px-6 py-3 text-center">פעולות</th>
               </tr>
             </thead>
@@ -155,19 +175,23 @@ export default function CategoriesPage() {
                   <tr key={cat.id} className="bg-white border-b hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium text-gray-900">{cat.name}</td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`text-xs font-semibold px-2.5 py-1 rounded ${
-                          cat.type === 'income'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-orange-100 text-orange-800'
-                        }`}
-                      >
-                        {cat.type === 'income' ? 'הכנסה' : 'הוצאה'}
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded bg-gray-100 text-gray-800">
+                        {cat.type === 'income'
+                          ? 'הכנסה'
+                          : cat.type === 'savings'
+                          ? 'חיסכון'
+                          : cat.type === 'donations'
+                          ? 'תרומה'
+                          : 'הוצאה'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
-                        {count} תנועות
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded ${
+                          cat.isMaaserEligible ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {cat.isMaaserEligible ? 'מוכר/חייב' : 'לא מחושב'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">

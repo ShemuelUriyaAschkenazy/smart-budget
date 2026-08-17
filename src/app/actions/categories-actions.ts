@@ -7,6 +7,7 @@ export interface CategoryItem {
   id: string;
   name: string;
   type: string;
+  isMaaserEligible: boolean;
   expectedAmount?: number | null;
   currentBalance?: number | null;
   _count?: {
@@ -14,7 +15,6 @@ export interface CategoryItem {
   };
 }
 
-// שליפת הקטגוריות והמרת שדות Decimal למספרים רגילים
 export async function getCategories(): Promise<CategoryItem[]> {
   const categories = await prisma.category.findMany({
     orderBy: { name: 'asc' },
@@ -26,16 +26,17 @@ export async function getCategories(): Promise<CategoryItem[]> {
   });
 
   return categories.map((c) => ({
-    id: c.id,
+    id: String(c.id),
     name: c.name,
     type: c.type,
+    isMaaserEligible: c.isMaaserEligible,
     expectedAmount: c.expectedAmount ? Number(c.expectedAmount) : null,
     currentBalance: c.currentBalance ? Number(c.currentBalance) : null,
     _count: c._count,
   }));
 }
 
-export async function createCategoryAction(name: string, type: 'expense' | 'income') {
+export async function createCategoryAction(name: string, type: 'expense' | 'income' | 'savings' | 'donations', isMaaserEligible: boolean = true) {
   if (!name.trim()) throw new Error('שם הקטגוריה אינו יכול להיות ריק');
 
   const existing = await prisma.category.findUnique({
@@ -50,17 +51,19 @@ export async function createCategoryAction(name: string, type: 'expense' | 'inco
     data: {
       name: name.trim(),
       type,
+      isMaaserEligible,
     },
   });
 
   revalidatePath('/categories');
   revalidatePath('/rules');
+  revalidatePath('/budget');
   revalidatePath('/');
 }
 
 export async function deleteCategoryAction(id: string) {
   const category = await prisma.category.findUnique({
-    where: { id },
+    where: { id: Number(id) },
     include: {
       _count: {
         select: { transactions: true },
@@ -79,10 +82,11 @@ export async function deleteCategoryAction(id: string) {
   }
 
   await prisma.category.delete({
-    where: { id },
+    where: { id: Number(id) },
   });
 
   revalidatePath('/categories');
   revalidatePath('/rules');
+  revalidatePath('/budget');
   revalidatePath('/');
 }

@@ -14,6 +14,7 @@ export interface TransactionRow {
   amount: number;
   source?: string;
   category?: string;
+  isMaaserEligible?: boolean;
 }
 
 function parseToDate(val: any): Date {
@@ -63,6 +64,7 @@ export async function getTransactions(): Promise<TransactionRow[]> {
     amount: Number(t.amount),
     source: t.source || 'בנק הפועלים',
     category: t.category?.name || 'ללא קטגוריה',
+    isMaaserEligible: t.isMaaserEligible,
   }));
 }
 
@@ -76,7 +78,6 @@ export async function clearAllTransactionsAction() {
   revalidatePath('/');
 }
 
-// עדכון קטגוריית תנועה קיימת
 export async function updateTransactionCategoryAction(transactionId: string, categoryName: string) {
   const category = await prisma.category.findUnique({
     where: { name: categoryName },
@@ -86,10 +87,25 @@ export async function updateTransactionCategoryAction(transactionId: string, cat
 
   await prisma.transaction.update({
     where: { id: transactionId },
-    data: { categoryId: category.id },
+    data: { 
+      categoryId: category.id,
+      isMaaserEligible: category.isMaaserEligible // סנכרון דגל המעשר לפי הדיפולט של הקטגוריה
+    },
   });
 
   revalidatePath('/');
+  revalidatePath('/budget');
+}
+
+// עדכון דגל מעשר ברמת התנועה הבודדת
+export async function toggleTransactionMaaserAction(transactionId: string, isEligible: boolean) {
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { isMaaserEligible: isEligible },
+  });
+
+  revalidatePath('/');
+  revalidatePath('/budget');
 }
 
 export async function processUploadedFile(formData: FormData) {
@@ -135,15 +151,15 @@ export async function processUploadedFile(formData: FormData) {
   let defaultCategory = existingCategories.find((c) => c.name === 'ללא קטגוריה');
   if (!defaultCategory) {
     defaultCategory = await prisma.category.create({
-      data: { name: 'ללא קטגוריה', type: 'expense' },
+      data: { name: 'ללא קטגוריה', type: 'expense', isMaaserEligible: false }
     });
   }
 
-  const categoryMap = new Map<string, number>();
-  existingCategories.forEach((c) => categoryMap.set(c.name, c.id));
-  categoryMap.set(defaultCategory.name, defaultCategory.id);
+  const categoryMap = new Map<string, { id: number; isMaaserEligible: boolean }>();
+  existingCategories.forEach((c) => categoryMap.set(c.name, { id: c.id, isMaaserEligible: c.isMaaserEligible }));
+  categoryMap.set(defaultCategory.name, { id: defaultCategory.id, isMaaserEligible: false });
 
-  const preClassifiedItems: { date: string; description: string; amount: number; categoryId: number; categoryName: string }[] = [];
+  const preClassifiedItems: { date: string; description: string; amount: number; categoryId: number; categoryName: string; isMaaserEligible: boolean }[] = [];
   const unclassifiedForAI: any[] = [];
 
   for (const row of rawRows) {
@@ -158,6 +174,7 @@ export async function processUploadedFile(formData: FormData) {
         amount: row.amount,
         categoryId: matchedRule.categoryId,
         categoryName: matchedRule.category.name,
+        isMaaserEligible: matchedRule.category.isMaaserEligible,
       });
     } else {
       unclassifiedForAI.push(row);
@@ -225,13 +242,18 @@ ${dynamicInstructions || 'אין חוקים דינמיים כרגע.'}
       description: item.description,
       amount: item.amount,
       categoryId: item.categoryId,
+      isMaaserEligible: item.isMaaserEligible,
     })),
-    ...aiClassifiedItems.map((item) => ({
-      date: item.date,
-      description: item.description,
-      amount: item.amount,
-      categoryId: categoryMap.get(item.category || 'ללא קטגוריה') || defaultCategory!.id,
-    })),
+    ...aiClassifiedItems.map((item) => {
+      const catInfo = categoryMap.get(item.category || 'ללא קטגוריה') || { id: defaultCategory!.id, isMaaserEligible: false };
+      return {
+        date: item.date,
+        description: item.description,
+        amount: item.amount,
+        categoryId: catInfo.id,
+        isMaaserEligible: catInfo.isMaaserEligible,
+      };
+    }),
   ];
 
   const savedTransactions = await Promise.all(
@@ -245,6 +267,7 @@ ${dynamicInstructions || 'אין חוקים דינמיים כרגע.'}
           source: sourceName,
           monthKey: getMonthKey(parsedDate),
           categoryId: item.categoryId,
+          isMaaserEligible: item.isMaaserEligible,
         },
         include: {
           category: true,
@@ -262,5 +285,6 @@ ${dynamicInstructions || 'אין חוקים דינמיים כרגע.'}
     amount: Number(t.amount),
     source: t.source || sourceName,
     category: t.category?.name || 'ללא קטגוריה',
+    isMaaserEligible: t.isMaaserEligible,
   }));
 }

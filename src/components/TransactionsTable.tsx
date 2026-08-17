@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { TransactionRow } from '../app/actions/parse-file';
+import { TransactionRow, toggleTransactionMaaserAction } from '../app/actions/parse-file';
 import { CategoryItem, getCategories } from '../app/actions/categories-actions';
 import { createRuleAction } from '../app/actions/rules-actions';
 
@@ -47,6 +47,13 @@ export default function TransactionsTable({
         categoryId: Number(matchedCat.id),
       });
     }
+  };
+
+  const handleToggleMaaser = async (item: TransactionRow) => {
+    if (!item.id) return;
+    const newStatus = !item.isMaaserEligible;
+    await toggleTransactionMaaserAction(item.id, newStatus);
+    item.isMaaserEligible = newStatus;
   };
 
   const handleConfirmRule = async () => {
@@ -96,6 +103,7 @@ export default function TransactionsTable({
               <th className="px-6 py-3">סכום</th>
               <th className="px-6 py-3">מקור</th>
               <th className="px-6 py-3">קטגוריה</th>
+              <th className="px-6 py-3 text-center">מעשר</th>
               <th className="px-6 py-3 text-center">פעולות</th>
             </tr>
           </thead>
@@ -135,6 +143,19 @@ export default function TransactionsTable({
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button
+                      onClick={() => handleToggleMaaser(item)}
+                      className={`text-xs font-bold px-2 py-1 rounded transition ${
+                        item.isMaaserEligible
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                          : 'bg-gray-100 text-gray-400'
+                      }`}
+                      title="לחץ כדי לשנות האם תנועה זו נחשבת למעשר"
+                    >
+                      {item.isMaaserEligible ? '🪙 מחושב' : 'לא מחושב'}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button
                       onClick={() => item.id && onDeleteRow(item.id)}
                       className="text-red-500 hover:text-red-700 text-xs font-semibold"
                       title="מחק שורה"
@@ -149,7 +170,6 @@ export default function TransactionsTable({
         </table>
       </div>
 
-      {/* מודאל הצעת חוק קופץ */}
       {pendingRule && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100">

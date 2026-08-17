@@ -1,20 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
+model Category {
+  id               Int           @id @default(autoincrement())
+  name             String        @unique
+  type             String        @default("expense") // "income" | "expense" | "savings" | "donations"
+  isMaaserEligible Boolean       @default(true) // ברירת מחדל לקטגוריה
+  expectedAmount   Decimal?
+  currentBalance   Decimal?
+  transactions     Transaction[]
+  rules            Rule[]
+  budgets          Budget[]
 }
 
-model Category {
-  id              Int           @id @default(autoincrement())
-  name            String        @unique
-  type            String        @default("expense")
-  expectedAmount  Decimal?
-  currentBalance  Decimal?
-  transactions    Transaction[]
-  rules           Rule[]
+model Transaction {
+  id               String   @id @default(cuid())
+  date             DateTime
+  description      String
+  amount           Decimal
+  source           String?
+  monthKey         String
+  categoryId       Int
+  category         Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  isMaaserEligible Boolean  @default(true) // דגל פרטני לתנועה
+  createdAt        DateTime @default(now())
 }
 
 model Rule {
@@ -25,21 +40,6 @@ model Rule {
   createdAt  DateTime @default(now())
 }
 
-// תנועות מתוך קבצי הבנק/אשראי/ביט
-model Transaction {
-  id          Int       @id @default(autoincrement())
-  date        DateTime
-  description String
-  amount      Decimal
-  source      String    // 'Discount', 'Max', 'Bit Manual'
-  monthKey    String    // '2026-08'
-  isConfirmed Boolean   @default(false)
-  
-  categoryId  Int?
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-}
-
-// חוקים קשיחים והנחיות ל-AI
 model AIRule {
   id              String    @id @default(cuid())
   ruleType        String    @default("prompt_instruction")
@@ -48,10 +48,19 @@ model AIRule {
   createdAt       DateTime  @default(now())
 }
 
-// Snapshots חודשיים של היסטוריית תקציב
-model MonthlySnapshot {
-  id        Int      @id @default(autoincrement())
-  monthKey  String   @unique // '2026-08'
-  data      Json     // שמירת מצב התקציב בדיוק כפי שהיה
-  createdAt DateTime @default(now())
+model Budget {
+  id         String   @id @default(cuid())
+  monthKey   String
+  amount     Decimal
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([monthKey, categoryId])
+}
+
+model MaaserSettings {
+  id             Int     @id @default(1)
+  initialBalance Decimal @default(0)
+  percentage     Decimal @default(10)
 }
