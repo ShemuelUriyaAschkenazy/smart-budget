@@ -5,6 +5,7 @@ import {
   getReconciliationData,
   createMatchAction,
   removeMatchAction,
+  applyAllSuggestedMatchesAction,
   ReconciliationOverview,
 } from '../actions/reconciliation-actions';
 
@@ -39,6 +40,12 @@ export default function ReconciliationPage() {
     await loadData();
   };
 
+  const handleApplyAllSuggestions = async () => {
+    if (!data || data.suggestedMatches.length === 0) return;
+    await applyAllSuggestedMatchesAction(data.suggestedMatches, selectedMonth);
+    await loadData();
+  };
+
   const handleUnmatch = async (bankId: string, creditId: string) => {
     await removeMatchAction(bankId, creditId);
     await loadData();
@@ -56,7 +63,7 @@ export default function ReconciliationPage() {
         <div>
           <h1 className="text-2xl font-black text-gray-900">🔗 התאמת אשראי ובנקים</h1>
           <p className="text-gray-500 text-sm mt-1">
-            בקרת כיסוי פיננסית: קשר בין חיובי הבנק בחודש הנבחר לבין פירוט עסקאות האשראי (הכולל גם את החודש הקודם).
+            בקרת כיסוי פיננסית: קשר בין חיובי הבנק בחודש הנבחר לבין פירוט עסקאות האשראי.
           </p>
         </div>
 
@@ -70,6 +77,30 @@ export default function ReconciliationPage() {
           />
         </div>
       </header>
+
+      {/* באנר הצעות התאמה אוטומטיות */}
+      {data.suggestedMatches.length > 0 && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl shadow-sm flex justify-between items-center flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">💡</span>
+            <div>
+              <p className="font-bold text-emerald-900 text-sm">
+                נמצאו {data.suggestedMatches.length} התאמות מוצעות בסכום מדויק!
+              </p>
+              <p className="text-xs text-emerald-700">
+                המערכת זיהתה תנועות בנק ותנועות אשראי בעלות סכום זהה.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleApplyAllSuggestions}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition shadow-sm"
+          >
+            אשר את כל ההצעות המוצעות ({data.suggestedMatches.length}) 🔗
+          </button>
+        </div>
+      )}
 
       {/* סרגל סיכום סנכרון */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -94,7 +125,7 @@ export default function ReconciliationPage() {
         </div>
       </div>
 
-      {/* כפתור פעולה מהירה לשיוך */}
+      {/* כפתור פעולה מהירה לשיוך ידני */}
       {selectedBankId && selectedCreditId && (
         <div className="bg-blue-600 text-white p-4 rounded-xl shadow-lg flex justify-between items-center animate-bounce">
           <span className="text-sm font-bold">נבחרו 2 תנועות לקישור. האם לאשר את ההתאמה?</span>
@@ -125,44 +156,53 @@ export default function ReconciliationPage() {
                 אין חיובי אשראי שנרשמו בבנק בחודש {selectedMonth}
               </p>
             ) : (
-              data.bankCharges.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => !item.isMatched && setSelectedBankId(selectedBankId === item.id ? null : item.id)}
-                  className={`p-3 rounded-lg border text-sm transition flex justify-between items-center cursor-pointer ${
-                    item.isMatched
-                      ? 'bg-emerald-50/60 border-emerald-200 cursor-default'
-                      : selectedBankId === item.id
-                      ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-300'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div>
-                    <p className="font-bold text-gray-800">{item.description}</p>
-                    <p className="text-xs text-gray-400">{item.date} • {item.source}</p>
-                  </div>
+              data.bankCharges.map((item) => {
+                const isSuggested = data.suggestedMatches.some((s) => s.bankItem.id === item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => !item.isMatched && setSelectedBankId(selectedBankId === item.id ? null : item.id)}
+                    className={`p-3 rounded-lg border text-sm transition flex justify-between items-center cursor-pointer ${
+                      item.isMatched
+                        ? 'bg-emerald-50/60 border-emerald-200 cursor-default'
+                        : selectedBankId === item.id
+                        ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-300'
+                        : isSuggested
+                        ? 'bg-emerald-50/40 border-emerald-300'
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-bold text-gray-800">{item.description}</p>
+                      <p className="text-xs text-gray-400">{item.date} • {item.source}</p>
+                    </div>
 
-                  <div className="text-left flex items-center gap-3">
-                    <span className="font-black text-gray-900 dir-ltr">₪{item.amount.toFixed(2)}</span>
-                    {item.isMatched ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (item.matchedToId) handleUnmatch(item.id, item.matchedToId);
-                        }}
-                        className="text-xs text-red-500 hover:underline font-bold"
-                        title="בטל קישור"
-                      >
-                        🔗 הסר
-                      </button>
-                    ) : (
-                      <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded">
-                        ⏳ ממתין
-                      </span>
-                    )}
+                    <div className="text-left flex items-center gap-3">
+                      <span className="font-black text-gray-900 dir-ltr">₪{item.amount.toFixed(2)}</span>
+                      {item.isMatched ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (item.matchedToId) handleUnmatch(item.id, item.matchedToId);
+                          }}
+                          className="text-xs text-red-500 hover:underline font-bold"
+                          title="בטל קישור"
+                        >
+                          🔗 הסר
+                        </button>
+                      ) : isSuggested ? (
+                        <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                          💡 מוצע
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded">
+                          ⏳ ממתין
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -172,7 +212,7 @@ export default function ReconciliationPage() {
           <div className="p-4 bg-gray-50 border-b border-gray-100 font-bold text-gray-800 flex justify-between items-center">
             <div>
               <span className="block">2. פירוט עסקאות אשראי שהועלו</span>
-              <span className="text-xs text-gray-400 font-normal">הצגת עסקאות מחודש זה והחודש שקדם לו</span>
+              <span className="text-xs text-gray-400 font-normal">הצגת עסקאות מחודש זה והחודש שקדמה לו</span>
             </div>
             <span className="text-xs text-gray-500 font-normal">לחץ לבחירה לשיוך</span>
           </div>
@@ -180,11 +220,12 @@ export default function ReconciliationPage() {
           <div className="p-3 space-y-2 max-h-[500px] overflow-y-auto">
             {data.creditDetails.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">
-                לא נמצאו עסקאות אשראי עבור חודש זה או החודש שקדם לו
+                לא נמצאו עסקאות אשראי עבור חודש זה או החודש שקדמה לו
               </p>
             ) : (
               data.creditDetails.map((item) => {
                 const isPrevMonth = item.description.includes('(חודש קודם)');
+                const isSuggested = data.suggestedMatches.some((s) => s.creditItem.id === item.id);
                 return (
                   <div
                     key={item.id}
@@ -194,6 +235,8 @@ export default function ReconciliationPage() {
                         ? 'bg-emerald-50/60 border-emerald-200 cursor-default'
                         : selectedCreditId === item.id
                         ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-300'
+                        : isSuggested
+                        ? 'bg-emerald-50/40 border-emerald-300'
                         : 'bg-white border-gray-200 hover:bg-gray-50'
                     }`}
                   >
@@ -214,6 +257,10 @@ export default function ReconciliationPage() {
                       {item.isMatched ? (
                         <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
                           🔗 מקושר
+                        </span>
+                      ) : isSuggested ? (
+                        <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                          💡 מוצע
                         </span>
                       ) : (
                         <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded">

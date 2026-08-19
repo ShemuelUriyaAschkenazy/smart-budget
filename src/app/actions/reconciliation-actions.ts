@@ -14,12 +14,18 @@ export interface ReconciliationItem {
   matchedToDescription?: string;
 }
 
+export interface SuggestedMatch {
+  bankItem: ReconciliationItem;
+  creditItem: ReconciliationItem;
+}
+
 export interface ReconciliationOverview {
   monthKey: string;
   bankCharges: ReconciliationItem[];
   creditDetails: ReconciliationItem[];
   unmatchedBankTotal: number;
   unmatchedCreditTotal: number;
+  suggestedMatches: SuggestedMatch[];
 }
 
 function formatDateForUI(dateObj: Date): string {
@@ -29,7 +35,6 @@ function formatDateForUI(dateObj: Date): string {
   return `${d}/${m}/${y}`;
 }
 
-// חישוב חודש קודם בפורמט YYYY-MM
 function getPreviousMonthKey(monthKey: string): string {
   const [yearStr, monthStr] = monthKey.split('-');
   let year = parseInt(yearStr, 10);
@@ -46,7 +51,6 @@ function getPreviousMonthKey(monthKey: string): string {
 export async function getReconciliationData(monthKey: string): Promise<ReconciliationOverview> {
   const previousMonthKey = getPreviousMonthKey(monthKey);
 
-  // שליפת תנועות מהחודש הנוכחי והחודש הקודם [previousMonthKey, monthKey]
   const transactions = await prisma.transaction.findMany({
     where: {
       monthKey: {
@@ -83,7 +87,6 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
       t.category?.isNeutralized || t.category?.name === 'כיסוי חיוב אשראי (מנוטרל)';
     const amt = Math.abs(Number(t.amount));
 
-    // חיובי בנק מוצגים רק מהחודש הנבחר הנוכחי
     if (isBankCharge && t.monthKey === monthKey) {
       const match = matches.find((m) => m.bankTransactionId === t.id);
       const isMatched = matchedBankIds.has(t.id);
@@ -100,9 +103,7 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
         matchedToId: match?.creditTransactionId,
         matchedToDescription: match?.creditTransaction?.description,
       });
-    } 
-    // עסקאות אשראי מוצגות גם מהחודש הנוכחי וגם מהחודש הקודם
-    else if (!isBankCharge && t.source && t.source !== 'בנק הפועלים' && t.source !== 'בנק דיסקונט') {
+    } else if (!isBankCharge && t.source && t.source !== 'בנק הפועלים' && t.source !== 'בנק דיסקונט') {
       const match = matches.find((m) => m.creditTransactionId === t.id);
       const isMatched = matchedCreditIds.has(t.id);
 
@@ -123,12 +124,32 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
     }
   });
 
+  // חישוב הצעות התאמה אוטומטיות (על בסיס זהות בסכום לתנועות פתוחות)
+  const suggestedMatches: SuggestedMatch[] = [];
+  const unmatchedBanks = bankCharges.filter((b) => !b.isMatched);
+  const unmatchedCredits = [...creditDetails.filter((c) => !c.isMatched)];
+
+  unmatchedBanks.forEach((b) => {
+    const creditIndex = unmatchedCredits.findIndex(
+      (c) => Math.abs(c.amount - b.amount) < 0.01
+    );
+
+    if (creditIndex !== -1) {
+      const matchedCredit = unmatchedCredits.splice(creditIndex, 1)[0];
+      suggestedMatches.push({
+        bankItem: b,
+        creditItem: matchedCredit,
+      });
+    }
+  });
+
   return {
     monthKey,
     bankCharges,
     creditDetails,
     unmatchedBankTotal,
     unmatchedCreditTotal,
+    suggestedMatches,
   };
 }
 
@@ -140,6 +161,27 @@ export async function createMatchAction(bankTransactionId: string, creditTransac
       creditTransactionId,
     },
   });
+
+  revalidatePath('/reconciliation');
+  revalidatePath('/');
+}
+
+// אישור גורף של כל ההצעות המוצעות בלחיצת כפתור אחת
+export async function applyAllSuggestedMatchesAction(
+  suggestions: SuggestedMatch[],
+  monthKey: string
+) {
+  await Promise.all(
+    suggestions.map((s) =>
+      prisma.creditMatch.create({
+        data: {
+          monthKey,
+          bankTransactionId: s.bankItem.id,
+          creditTransactionId: s.creditItem.id,
+        },
+      })
+    )
+  );
 
   revalidatePath('/reconciliation');
   revalidatePath('/');
