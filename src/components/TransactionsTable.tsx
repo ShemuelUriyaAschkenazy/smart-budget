@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { TransactionRow, toggleTransactionMaaserAction } from '../app/actions/parse-file';
-import { CategoryItem, getCategories } from '../app/actions/categories-actions';
+import { CategoryItem } from '../app/actions/categories-actions';
 import { createRuleAction } from '../app/actions/rules-actions';
 
 interface TableProps {
   transactions: TransactionRow[];
+  categories: CategoryItem[]; // לקבל ישירות מהאבא כדי שה-State יהיה מסונכרן מוחלט
   onDeleteRow: (id: string) => void;
   onClearAll: () => void;
   onCategoryChange: (id: string, newCategory: string) => Promise<void>;
@@ -14,20 +15,16 @@ interface TableProps {
 
 export default function TransactionsTable({
   transactions,
+  categories, // שימוש ב-Prop
   onDeleteRow,
   onClearAll,
   onCategoryChange,
 }: TableProps) {
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [pendingRule, setPendingRule] = useState<{
     description: string;
     categoryName: string;
     categoryId: number;
   } | null>(null);
-
-  useEffect(() => {
-    getCategories().then(setCategories);
-  }, []);
 
   if (!transactions || transactions.length === 0) return null;
 
