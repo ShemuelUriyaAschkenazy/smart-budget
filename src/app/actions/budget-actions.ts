@@ -80,6 +80,11 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
     const donationItems: BudgetVsActualItem[] = [];
 
     categories.forEach((cat) => {
+      // התעלמות מקטגוריות מנוטרלות (כמו כיסוי חיוב אשראי)
+      if (cat.isNeutralized || cat.name === 'כיסוי חיוב אשראי (מנוטרל)') {
+        return;
+      }
+
       const budgetAmount = cat.budgets && cat.budgets[0] ? Number(cat.budgets[0].amount) : 0;
       let actualAmount = 0;
 
@@ -88,7 +93,6 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
           const amt = Math.abs(Number(t.amount));
           actualAmount += amt;
 
-          // סכימת מעשר חכמה לפי דגל התנועה
           if (cat.type === 'income' && t.isMaaserEligible) {
             monthMaaserEligibleIncome += amt;
           } else if (cat.type === 'donations' && t.isMaaserEligible) {
