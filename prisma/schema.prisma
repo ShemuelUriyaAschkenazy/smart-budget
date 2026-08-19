@@ -12,7 +12,7 @@ model Category {
   name             String        @unique
   type             String        @default("expense") // "income" | "expense" | "savings" | "donations" | "transfer"
   isMaaserEligible Boolean       @default(true)
-  isNeutralized    Boolean       @default(false) // V - מנוטרל מחישובי הוצאות ומעשר (כמו כיסוי חיוב אשראי)
+  isNeutralized    Boolean       @default(false)
   expectedAmount   Decimal?
   currentBalance   Decimal?
   transactions     Transaction[]
@@ -21,16 +21,32 @@ model Category {
 }
 
 model Transaction {
-  id               String   @id @default(cuid())
+  id               String        @id @default(cuid())
   date             DateTime
   description      String
   amount           Decimal
   source           String?
   monthKey         String
   categoryId       Int
-  category         Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  isMaaserEligible Boolean  @default(true)
-  createdAt        DateTime @default(now())
+  category         Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  isMaaserEligible Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+
+  // קשרים עבור מנגנון התאמות אשראי
+  bankMatches      CreditMatch[] @relation("BankTransaction")
+  creditMatches    CreditMatch[] @relation("CreditTransaction")
+}
+
+model CreditMatch {
+  id                  String      @id @default(cuid())
+  monthKey            String
+  bankTransactionId   String
+  bankTransaction     Transaction @relation("BankTransaction", fields: [bankTransactionId], references: [id], onDelete: Cascade)
+  creditTransactionId String
+  creditTransaction   Transaction @relation("CreditTransaction", fields: [creditTransactionId], references: [id], onDelete: Cascade)
+  createdAt           DateTime    @default(now())
+
+  @@unique([bankTransactionId, creditTransactionId])
 }
 
 model Rule {
