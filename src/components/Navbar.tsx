@@ -10,12 +10,26 @@ export default function Navbar() {
     { label: '📊 תנועות וסיווג', href: '/' },
     { label: '🔗 התאמת אשראי', href: '/reconciliation' },
     { label: '🎯 ניהול תקציב', href: '/budget' },
+    { label: '🏦 חשבונות וכרטיסים', href: '/accounts' },
     { label: '🏷️ ניהול קטגוריות', href: '/categories' },
     { label: '⚙️ חוקי סיווג', href: '/rules' },
   ];
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+      {/* כותרת סייעתא דשמיא מעוצבת ויוקרתית */}
+      <div className="bg-gradient-to-r from-amber-50 via-slate-100 to-amber-50 border-b border-amber-200/50 py-1 px-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-center gap-2 text-[12px] font-serif tracking-wide text-slate-700">
+          <span className="text-amber-600/80 font-bold">✨</span>
+          <span className="font-bold text-slate-900">בס"ד</span>
+          <span className="text-amber-500 font-bold">•</span>
+          <span className="font-semibold bg-gradient-to-r from-amber-800 to-slate-800 bg-clip-text text-transparent">
+            בשם ה' נעשה ונצליח
+          </span>
+          <span className="text-amber-600/80 font-bold">✨</span>
+        </div>
+      </div>
+
       <div className="max-w-6xl mx-auto px-4 sm:px-8 flex justify-between items-center h-16">
         <Link href="/" className="flex items-center gap-2 font-black text-xl text-blue-600">
           <span>SmartBudget</span>

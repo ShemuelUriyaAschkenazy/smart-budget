@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   analyzeUploadedFile,
   commitTransactionsImport,
   FileAnalysisResult,
   TransactionRow,
 } from '../app/actions/parse-file';
+import { getAccounts, AccountItem } from '../app/actions/account-actions';
 
 interface FileUploadProps {
   onDataParsed: (data: TransactionRow[]) => void;
@@ -14,16 +15,25 @@ interface FileUploadProps {
 
 export default function FileUpload({ onDataParsed }: FileUploadProps) {
   const [loading, setLoading] = useState(false);
-  const [source, setSource] = useState('בנק הפועלים');
+  const [accounts, setAccounts] = useState<AccountItem[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
   const [analysis, setAnalysis] = useState<FileAnalysisResult | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
 
+  useEffect(() => {
+    getAccounts(true).then((data) => {
+      setAccounts(data);
+      if (data.length > 0) setSelectedAccountId(data[0].id);
+    });
+  }, []);
+
   async function handleAnalyze(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(true);
+    if (!selectedAccountId) return alert('נא להגדיר ולבחור חשבון פעיל תחילה');
 
+    setLoading(true);
     const formData = new FormData(e.currentTarget);
-    formData.append('source', source);
+    formData.append('accountId', selectedAccountId);
 
     try {
       const result = await analyzeUploadedFile(formData);
@@ -45,7 +55,7 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
         ? [...analysis.newRows, ...analysis.duplicateRows]
         : analysis.newRows;
 
-      const saved = await commitTransactionsImport(payload, analysis.sourceName);
+      const saved = await commitTransactionsImport(payload, selectedAccountId);
       onDataParsed(saved);
       setAnalysis(null);
     } catch (err) {
@@ -74,21 +84,21 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
         <div className="w-full sm:w-auto">
           <label className="block text-sm font-medium text-gray-700 mb-1">מקור החשבון</label>
           <select
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
+            value={selectedAccountId}
+            onChange={(e) => setSelectedAccountId(e.target.value)}
             className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none bg-white font-semibold"
           >
-            <option value="בנק הפועלים">בנק הפועלים</option>
-            <option value="בנק דיסקונט">בנק דיסקונט</option>
-            <option value="כרטיס אשראי Max">כרטיס אשראי Max</option>
-            <option value="ישראכרט">ישראכרט</option>
-            <option value="כיסי ביט">כיסי ביט</option>
+            {accounts.map((acc) => (
+              <option key={acc.id} value={acc.id}>
+                {acc.name} ({acc.type === 'bank' ? 'בנק' : 'אשראי'})
+              </option>
+            ))}
           </select>
         </div>
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || accounts.length === 0}
           className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition disabled:opacity-50 whitespace-nowrap"
         >
           {loading ? 'בודק קובץ...' : 'בדוק קובץ לפני טעינה'}

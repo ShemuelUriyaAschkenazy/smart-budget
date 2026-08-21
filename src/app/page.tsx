@@ -11,24 +11,29 @@ import {
   updateTransactionCategoryAction
 } from './actions/parse-file';
 import { getCategories, CategoryItem } from './actions/categories-actions';
+import { getAccounts, AccountItem } from './actions/account-actions';
 
 export default function Home() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-08');
+  const [selectedSource, setSelectedSource] = useState<string>('ALL');
 
-  const loadData = async (monthKey: string) => {
-    const [txData, catData] = await Promise.all([
-      getTransactions(monthKey),
+  const loadData = async (monthKey: string, source: string) => {
+    const [txData, catData, accData] = await Promise.all([
+      getTransactions(monthKey, source),
       getCategories(),
+      getAccounts(true),
     ]);
     setTransactions(txData);
     setCategories(catData);
+    setAccounts(accData);
   };
 
   useEffect(() => {
-    loadData(selectedMonth);
-  }, [selectedMonth]);
+    loadData(selectedMonth, selectedSource);
+  }, [selectedMonth, selectedSource]);
 
   const handleDeleteRow = async (id: string) => {
     setTransactions((prev) => prev.filter((item) => item.id !== id));
@@ -39,7 +44,7 @@ export default function Home() {
     if (confirm('האם אתה בטוח שברצונך למחוק את כל התנועות?')) {
       setTransactions([]);
       await clearAllTransactionsAction();
-      await loadData(selectedMonth);
+      await loadData(selectedMonth, selectedSource);
     }
   };
 
@@ -48,7 +53,7 @@ export default function Home() {
       prev.map((t) => (t.id === id ? { ...t, category: newCategory } : t))
     );
     await updateTransactionCategoryAction(id, newCategory);
-    await loadData(selectedMonth);
+    await loadData(selectedMonth, selectedSource);
   };
 
   return (
@@ -61,22 +66,41 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-          <label className="text-xs font-bold text-gray-700">סינון לפי חודש:</label>
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="border border-gray-300 rounded-lg p-1.5 text-xs font-semibold focus:outline-none bg-white"
-          />
+        {/* סרגל סינונים: חודש + מקור חשבון */}
+        <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-bold text-gray-700">סינון חודש:</label>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="border border-gray-300 rounded-lg p-1.5 text-xs font-semibold focus:outline-none bg-white"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 border-r pr-3 border-gray-200">
+            <label className="text-xs font-bold text-gray-700">מקור:</label>
+            <select
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              className="border border-gray-300 rounded-lg p-1.5 text-xs font-semibold focus:outline-none bg-white"
+            >
+              <option value="ALL">כל החשבונות והכרטיסים</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.name}>
+                  {acc.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </header>
 
-      <FileUpload onDataParsed={() => loadData(selectedMonth)} />
+      <FileUpload onDataParsed={() => loadData(selectedMonth, selectedSource)} />
 
       <TransactionsTable 
         transactions={transactions}
-        categories={categories} // העברת הקטגוריות המסונכרנות
+        categories={categories}
         onDeleteRow={handleDeleteRow}
         onClearAll={handleClearAll}
         onCategoryChange={handleCategoryChange}

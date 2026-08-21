@@ -10,7 +10,7 @@ datasource db {
 model Category {
   id               Int           @id @default(autoincrement())
   name             String        @unique
-  type             String        @default("expense") // "income" | "expense" | "savings" | "donations" | "transfer"
+  type             String        @default("expense")
   isMaaserEligible Boolean       @default(true)
   isNeutralized    Boolean       @default(false)
   expectedAmount   Decimal?
@@ -20,21 +20,35 @@ model Category {
   budgets          Budget[]
 }
 
+model FinancialAccount {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  type         String        // "bank" | "credit_card"
+  provider     String        // "poalim", "max", "isracard", "cal", "discount"
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+
+  transactions Transaction[]
+}
+
 model Transaction {
-  id               String        @id @default(cuid())
+  id               String            @id @default(cuid())
   date             DateTime
   description      String
   amount           Decimal
-  source           String?
   monthKey         String
-  categoryId       Int
-  category         Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  isMaaserEligible Boolean       @default(true)
-  createdAt        DateTime      @default(now())
+  
+  // קישור יחיד ומדויק לחשבון
+  accountId        String?
+  account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
-  // קשרים עבור מנגנון התאמות אשראי
-  bankMatches      CreditMatch[] @relation("BankTransaction")
-  creditMatches    CreditMatch[] @relation("CreditTransaction")
+  categoryId       Int
+  category         Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  isMaaserEligible Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+
+  bankMatches      CreditMatch[]     @relation("BankTransaction")
+  creditMatches    CreditMatch[]     @relation("CreditTransaction")
 }
 
 model CreditMatch {

@@ -13,13 +13,15 @@ export interface TransactionRow {
   rawDate?: string;
   description: string;
   amount: number;
-  source?: string;
+  accountId?: string;
+  accountName?: string;
   category?: string;
   isMaaserEligible?: boolean;
 }
 
 export interface FileAnalysisResult {
   sourceName: string;
+  accountId: string;
   newRows: TransactionRow[];
   duplicateRows: TransactionRow[];
 }
@@ -50,13 +52,15 @@ function getMonthKey(dateObj: Date): string {
   return `${year}-${month}`;
 }
 
-export async function getTransactions(monthKey?: string): Promise<TransactionRow[]> {
-  const whereCondition = monthKey ? { monthKey } : {};
+export async function getTransactions(monthKey?: string, accountId?: string): Promise<TransactionRow[]> {
+  const whereCondition: any = {};
+  if (monthKey) whereCondition.monthKey = monthKey;
+  if (accountId && accountId !== 'ALL') whereCondition.accountId = accountId;
 
   const data = await prisma.transaction.findMany({
     where: whereCondition,
     orderBy: { date: 'desc' },
-    include: { category: true },
+    include: { category: true, account: true },
   });
 
   return data.map((t) => ({
@@ -65,7 +69,8 @@ export async function getTransactions(monthKey?: string): Promise<TransactionRow
     rawDate: t.date.toISOString(),
     description: t.description,
     amount: Number(t.amount),
-    source: t.source || 'בנק הפועלים',
+    accountId: t.accountId || undefined,
+    accountName: t.account?.name || 'חשבון כללי',
     category: t.category?.name || 'ללא קטגוריה',
     isMaaserEligible: t.isMaaserEligible,
   }));
@@ -74,10 +79,9 @@ export async function getTransactions(monthKey?: string): Promise<TransactionRow
 // זיהוי עמיד בפני רווחים נסתרים ותווים מיוחדים
 export async function isCreditCardChargeDescription(description: string): Promise<boolean> {
   if (!description) return false;
-  
-  // ניקוי תווים מיוחדים, רווחים כפולים והמרה לאותיות קטנות
+
   const cleanDesc = description
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // הסרת רווחים נסתרים
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\s+/g, ' ')
     .toLowerCase()
     .trim();
@@ -103,9 +107,16 @@ export async function isCreditCardChargeDescription(description: string): Promis
 
 export async function analyzeUploadedFile(formData: FormData): Promise<FileAnalysisResult> {
   const file = formData.get('file') as File;
-  const sourceName = (formData.get('source') as string) || 'בנק הפועלים';
+  const accountId = formData.get('accountId') as string;
 
   if (!file) throw new Error('לא נבחר קובץ');
+  if (!accountId) throw new Error('חובה לבחור חשבון/כרטיס אשראי');
+
+  const account = await prisma.financialAccount.findUnique({
+    where: { id: accountId },
+  });
+
+  const sourceName = account ? account.name : 'חשבון לא ידוע';
 
   const buffer = await file.arrayBuffer();
   const workbook = new ExcelJS.Workbook();
@@ -148,7 +159,8 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
       rawDate: r.dateObj.toISOString(),
       description: r.description,
       amount: r.amount,
-      source: sourceName,
+      accountId,
+      accountName: sourceName,
     };
 
     if (existingSet.has(key)) {
@@ -158,12 +170,12 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
     }
   });
 
-  return { sourceName, newRows, duplicateRows };
+  return { sourceName, accountId, newRows, duplicateRows };
 }
 
 export async function commitTransactionsImport(
   itemsToSave: TransactionRow[],
-  sourceName: string
+  accountId: string
 ): Promise<TransactionRow[]> {
   if (!itemsToSave || itemsToSave.length === 0) return [];
 
@@ -251,7 +263,6 @@ export async function commitTransactionsImport(
       .map((r) => `- ${r.instructionText}`)
       .join('\n');
 
-    // הנחיה קשיחה ל-AI לסווג חיובי אשראי אך ורק ל"כיסוי חיוב אשראי (מנוטרל)"
     const systemInstruction = `
 אתה עוזר פיננסי אישי המסווג תנועות בנק בעברית.
 אתה מורשה לבחור קטגוריה אך ורק מתוך הרשימה הסגורה הבאה:
@@ -316,12 +327,12 @@ export async function commitTransactionsImport(
           date: item.dateObj,
           description: item.description,
           amount: item.amount,
-          source: sourceName,
+          accountId: accountId,
           monthKey: getMonthKey(item.dateObj),
           categoryId: item.categoryId,
           isMaaserEligible: item.isMaaserEligible,
         },
-        include: { category: true },
+        include: { category: true, account: true },
       })
     )
   );
@@ -335,7 +346,8 @@ export async function commitTransactionsImport(
     rawDate: t.date.toISOString(),
     description: t.description,
     amount: Number(t.amount),
-    source: t.source || sourceName,
+    accountId: t.accountId || accountId,
+    accountName: t.account?.name || 'חשבון כללי',
     category: t.category?.name || 'ללא קטגוריה',
     isMaaserEligible: t.isMaaserEligible,
   }));
