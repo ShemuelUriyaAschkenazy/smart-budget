@@ -8,6 +8,7 @@ export interface AccountItem {
   name: string;
   type: string;
   provider: string;
+  last4Digits?: string | null;
   isActive: boolean;
 }
 
@@ -25,7 +26,12 @@ export async function getAccounts(onlyActive = false): Promise<AccountItem[]> {
   });
 }
 
-export async function createAccountAction(name: string, type: 'bank' | 'credit_card', provider: string) {
+export async function createAccountAction(
+  name: string,
+  type: 'bank' | 'credit_card',
+  provider: string,
+  last4Digits?: string
+) {
   if (!name.trim()) throw new Error('שם החשבון אינו יכול להיות ריק');
 
   const existing = await prisma.financialAccount.findUnique({
@@ -34,11 +40,14 @@ export async function createAccountAction(name: string, type: 'bank' | 'credit_c
 
   if (existing) throw new Error('כבר קיים חשבון בשם זה');
 
+  const cleanLast4 = last4Digits?.trim() || null;
+
   await prisma.financialAccount.create({
     data: {
       name: name.trim(),
       type,
       provider,
+      last4Digits: cleanLast4,
       isActive: true,
     },
   });
@@ -66,7 +75,6 @@ export async function deleteAccountAction(id: string) {
   revalidatePath('/');
 }
 
-// מעקב טעינה חודשי (Checklist)
 export async function getMonthlyAccountsChecklist(monthKey: string): Promise<AccountUploadStatus[]> {
   const activeAccounts = await prisma.financialAccount.findMany({
     where: { isActive: true },
@@ -93,6 +101,7 @@ export async function getMonthlyAccountsChecklist(monthKey: string): Promise<Acc
         name: account.name,
         type: account.type,
         provider: account.provider,
+        last4Digits: account.last4Digits,
         isActive: account.isActive,
       },
       hasUploadedThisMonth: count > 0,

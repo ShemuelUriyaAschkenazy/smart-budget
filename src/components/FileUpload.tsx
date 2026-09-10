@@ -16,30 +16,47 @@ interface FileUploadProps {
 export default function FileUpload({ onDataParsed }: FileUploadProps) {
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState<string>('max');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
   const [analysis, setAnalysis] = useState<FileAnalysisResult | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
 
   useEffect(() => {
     getAccounts(true).then((data) => {
       setAccounts(data);
-      if (data.length > 0) setSelectedAccountId(data[0].id);
     });
   }, []);
 
+  // סינון דינמי: רק חשבונות שמשויכים לספק שנבחר כרגע בשדה הראשון
+  const availableAccounts = accounts.filter((acc) => acc.provider === selectedProvider);
+
+  // בעת החלפת ספק בשדה הראשון - נעדכן את שדה החשבון לברירת מחדל הגיונית
+  const handleProviderChange = (provider: string) => {
+    setSelectedProvider(provider);
+    if (provider === 'max') {
+      setSelectedAccountId('ALL'); // ברירת מחדל למקס - מרוכז
+    } else {
+      const filtered = accounts.filter((acc) => acc.provider === provider);
+      setSelectedAccountId(filtered.length > 0 ? filtered[0].id : '');
+    }
+  };
+
   async function handleAnalyze(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!selectedAccountId) return alert('נא להגדיר ולבחור חשבון פעיל תחילה');
+    if (!selectedAccountId && selectedProvider !== 'max') {
+      return alert('נא לבחור חשבון/כרטיס להעלאה');
+    }
 
     setLoading(true);
     const formData = new FormData(e.currentTarget);
+    formData.append('provider', selectedProvider);
     formData.append('accountId', selectedAccountId);
 
     try {
       const result = await analyzeUploadedFile(formData);
       setAnalysis(result);
-    } catch (err) {
-      alert('שגיאה בניתוח הקובץ.');
+    } catch (err: any) {
+      alert(err.message || 'שגיאה בניתוח הקובץ.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -48,16 +65,15 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
 
   const handleConfirmImport = async () => {
     if (!analysis) return;
-
     setLoading(true);
     try {
       const payload = includeDuplicates
         ? [...analysis.newRows, ...analysis.duplicateRows]
         : analysis.newRows;
-
       const saved = await commitTransactionsImport(payload, selectedAccountId);
       onDataParsed(saved);
       setAnalysis(null);
+      setIncludeDuplicates(false);
     } catch (err) {
       alert('שגיאה בשמירת התנועות.');
     } finally {
@@ -67,11 +83,11 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
 
   return (
     <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100 mb-8 space-y-4">
-      <h2 className="text-xl font-bold text-gray-800">1. העלאת קובץ בנק / אשראי</h2>
-
+      <h2 className="text-xl font-bold text-gray-800">1. העלאת קובץ תנועות</h2>
       <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-4 items-end">
+        {/* 1. קובץ */}
         <div className="flex-1 w-full">
-          <label className="block text-sm font-medium text-gray-700 mb-1">בחר קובץ אקסל (.xlsx)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">קובץ אקסל (.xlsx)</label>
           <input
             type="file"
             name="file"
@@ -81,16 +97,38 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
           />
         </div>
 
+        {/* 2. ספק / מקור */}
         <div className="w-full sm:w-auto">
-          <label className="block text-sm font-medium text-gray-700 mb-1">מקור החשבון</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">ספק / חברה</label>
+          <select
+            value={selectedProvider}
+            onChange={(e) => handleProviderChange(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none bg-white font-semibold"
+          >
+            <option value="max">Max</option>
+            <option value="cal">כאל / Cal</option>
+            <option value="isracard">ישראכרט</option>
+            <option value="poalim">בנק הפועלים</option>
+          </select>
+        </div>
+
+        {/* 3. שיוך חשבון ספציפי (מסונן לפי הספק) */}
+        <div className="w-full sm:w-auto">
+          <label className="block text-sm font-medium text-gray-700 mb-1">שיוך חשבון</label>
           <select
             value={selectedAccountId}
             onChange={(e) => setSelectedAccountId(e.target.value)}
             className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none bg-white font-semibold"
           >
-            {accounts.map((acc) => (
+            {/* אופציה מרוכזת שקיימת ב-Max */}
+            {selectedProvider === 'max' && (
+              <option value="ALL">✨ כל הכרטיסים (פיצול לפי 4 ספרות)</option>
+            )}
+
+            {/* רשימת הכרטיסים המוצגים בלעדית עבור הספק שנבחר */}
+            {availableAccounts.map((acc) => (
               <option key={acc.id} value={acc.id}>
-                {acc.name} ({acc.type === 'bank' ? 'בנק' : 'אשראי'})
+                {acc.name} {acc.last4Digits ? `(••${acc.last4Digits})` : ''}
               </option>
             ))}
           </select>
@@ -101,36 +139,34 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
           disabled={loading || accounts.length === 0}
           className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition disabled:opacity-50 whitespace-nowrap"
         >
-          {loading ? 'בודק קובץ...' : 'בדוק קובץ לפני טעינה'}
+          {loading ? 'מפענח...' : 'טען קובץ'}
         </button>
       </form>
 
-      {/* חלון בדיקה מקדימה קופץ (Preview Modal) */}
+      {/* Preview Modal */}
       {analysis && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-4 border border-gray-100 max-h-[85vh] flex flex-col">
             <div className="border-b pb-3">
-              <h3 className="text-xl font-bold text-gray-900">סיכום בדיקת קובץ - {analysis.sourceName}</h3>
+              <h3 className="text-xl font-bold text-gray-900">תצוגה מקדימה - {analysis.sourceName}</h3>
               <p className="text-xs text-gray-500 mt-1">
-                שום דבר עדיין לא נשמר ב-Database. עיין בסיכום ובחר כיצד להמשיך:
+                בדיקה מול כפילויות קיימות ב-Database.
               </p>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                <span className="text-xs text-emerald-700 font-bold uppercase">תנועות חדשות לטעינה</span>
+                <span className="text-xs text-emerald-700 font-bold uppercase">תנועות חדשות</span>
                 <p className="text-2xl font-black text-emerald-800 mt-1">{analysis.newRows.length}</p>
               </div>
-
               <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
-                <span className="text-xs text-amber-700 font-bold uppercase">תנועות החשודות ככפולות</span>
+                <span className="text-xs text-amber-700 font-bold uppercase">כפילויות שנמצאו</span>
                 <p className="text-2xl font-black text-amber-800 mt-1">{analysis.duplicateRows.length}</p>
               </div>
             </div>
 
             {analysis.duplicateRows.length > 0 && (
               <div className="flex-1 overflow-y-auto space-y-2 border rounded-lg p-3 bg-gray-50 max-h-40">
-                <p className="text-xs font-bold text-gray-700 mb-2">פירוט כפולות זוהו:</p>
+                <p className="text-xs font-bold text-gray-700 mb-2">תנועות כפולות שלא ייטענו:</p>
                 {analysis.duplicateRows.map((item, idx) => (
                   <div key={idx} className="p-2 bg-white rounded border border-gray-200 text-xs flex justify-between">
                     <div>
@@ -143,6 +179,7 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
               </div>
             )}
 
+            {/* Checkbox ליבוא כפילויות */}
             {analysis.duplicateRows.length > 0 && (
               <div className="flex items-center gap-2 pt-2">
                 <input
@@ -161,10 +198,13 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
             <div className="flex justify-end gap-3 pt-3 border-t">
               <button
                 type="button"
-                onClick={() => setAnalysis(null)}
+                onClick={() => {
+                  setAnalysis(null);
+                  setIncludeDuplicates(false);
+                }}
                 className="px-5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition"
               >
-                בטל העלאה
+                ביטול
               </button>
               <button
                 type="button"
@@ -172,7 +212,7 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
                 disabled={loading}
                 className="px-5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition disabled:opacity-50"
               >
-                {loading ? 'שומר...' : 'אשר וייבא'}
+                {loading ? 'שומר...' : 'אישור ויבוא'}
               </button>
             </div>
           </div>

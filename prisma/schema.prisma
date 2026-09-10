@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Category {
@@ -24,7 +25,8 @@ model FinancialAccount {
   id           String        @id @default(cuid())
   name         String        @unique
   type         String        // "bank" | "credit_card"
-  provider     String        // "poalim", "max", "isracard", "cal", "discount"
+  provider     String        // "poalim", "max", "isracard", "cal"
+  last4Digits  String?       // 4 ספרות אחרונות (למשל: "1221", "3725")
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
 

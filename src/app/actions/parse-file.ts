@@ -4,6 +4,10 @@ import { GoogleGenAI, Type } from '@google/genai';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { parsePoalimFile } from '../../lib/parsers/poalim-parser';
+import { parseMaxFile } from '../../lib/parsers/max-parser';
+import { parseCalFile } from '../../lib/parsers/cal-parser';
+import { parseIsracardFile } from '../../lib/parsers/isracard-parser';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -24,19 +28,6 @@ export interface FileAnalysisResult {
   accountId: string;
   newRows: TransactionRow[];
   duplicateRows: TransactionRow[];
-}
-
-function parseToDate(val: any): Date {
-  if (val instanceof Date && !isNaN(val.getTime())) return val;
-  if (typeof val === 'string') {
-    const parts = val.trim().split(/[\/.-]/);
-    if (parts.length === 3 && parts[0].length <= 2 && parts[2].length === 4) {
-      return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-    }
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return new Date();
 }
 
 function formatDateForUI(dateObj: Date): string {
@@ -76,7 +67,6 @@ export async function getTransactions(monthKey?: string, accountId?: string): Pr
   }));
 }
 
-// זיהוי עמיד בפני רווחים נסתרים ותווים מיוחדים
 export async function isCreditCardChargeDescription(description: string): Promise<boolean> {
   if (!description) return false;
 
@@ -107,40 +97,49 @@ export async function isCreditCardChargeDescription(description: string): Promis
 
 export async function analyzeUploadedFile(formData: FormData): Promise<FileAnalysisResult> {
   const file = formData.get('file') as File;
-  const accountId = formData.get('accountId') as string;
+  const provider = (formData.get('provider') as string) || 'max';
+  const accountId = (formData.get('accountId') as string) || 'ALL';
 
   if (!file) throw new Error('לא נבחר קובץ');
-  if (!accountId) throw new Error('חובה לבחור חשבון/כרטיס אשראי');
 
-  const account = await prisma.financialAccount.findUnique({
-    where: { id: accountId },
-  });
-
-  const sourceName = account ? account.name : 'חשבון לא ידוע';
+  let sourceName = 'קובץ מרוכז (כל הכרטיסים)';
+  if (accountId !== 'ALL') {
+    const account = await prisma.financialAccount.findUnique({
+      where: { id: accountId },
+    });
+    if (account) sourceName = account.name;
+  }
 
   const buffer = await file.arrayBuffer();
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
 
-  const worksheet = workbook.worksheets[0];
-  const parsedRows: { dateObj: Date; description: string; amount: number }[] = [];
+  let parsedRows: { dateObj: Date; description: string; amount: number; accountId: string }[] = [];
 
-  worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber < 6) return;
-
-    const values = row.values as any[];
-    const dateObj = parseToDate(values[1]);
-    const description = values[2] ? String(values[2]).trim() : '';
-
-    const debit = values[5] ? Number(String(values[5]).replace(/,/g, '')) : 0;
-    const credit = values[6] ? Number(String(values[6]).replace(/,/g, '')) : 0;
-    const amount = credit > 0 ? credit : -debit;
-
-    if (description && (debit > 0 || credit > 0)) {
-      parsedRows.push({ dateObj, description, amount });
+switch (provider) {
+    case 'max': {
+      const maxRows = await parseMaxFile(workbook, accountId);
+      parsedRows = maxRows;
+      break;
     }
-  });
-
+    case 'isracard': {
+      const isracardRows = await parseIsracardFile(workbook);
+      parsedRows = isracardRows.map((r) => ({ ...r, accountId }));
+      break;
+    }
+    case 'cal': {
+      const calRows = await parseCalFile(workbook);
+      parsedRows = calRows.map((r) => ({ ...r, accountId }));
+      break;
+    }
+    case 'poalim':
+    default: {
+      const poalimRows = await parsePoalimFile(workbook);
+      parsedRows = poalimRows.map((r) => ({ ...r, accountId }));
+      break;
+    }
+  }
+  
   const existingTx = await prisma.transaction.findMany({
     select: { date: true, description: true, amount: true },
   });
@@ -159,7 +158,7 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
       rawDate: r.dateObj.toISOString(),
       description: r.description,
       amount: r.amount,
-      accountId,
+      accountId: r.accountId,
       accountName: sourceName,
     };
 
@@ -211,9 +210,8 @@ export async function commitTransactionsImport(
 
   for (const row of itemsToSave) {
     const isCreditCardTransfer = await isCreditCardChargeDescription(row.description);
-    const dateObj = row.rawDate ? new Date(row.rawDate) : parseToDate(row.date);
+    const dateObj = row.rawDate ? new Date(row.rawDate) : new Date(row.date);
 
-    // 1. קדימות עליונה קשיחה: חיובי אשראי נלכדים מיד
     if (isCreditCardTransfer) {
       preClassifiedItems.push({
         dateObj,
@@ -226,7 +224,6 @@ export async function commitTransactionsImport(
       continue;
     }
 
-    // 2. בדיקה מול חוקים רגילים
     const matchedRule = regularRules.find((rule) =>
       row.description.toLowerCase().includes(rule.keyword.toLowerCase())
     );
@@ -264,7 +261,7 @@ export async function commitTransactionsImport(
       .join('\n');
 
     const systemInstruction = `
-אתה עוזר פיננסי אישי המסווג תנועות בנק בעברית.
+אתה עוזר פיננסי אישי המסווג תנועות בעברית.
 אתה מורשה לבחור קטגוריה אך ורק מתוך הרשימה הסגורה הבאה:
 [${allowedCategories.join(', ')}]
 

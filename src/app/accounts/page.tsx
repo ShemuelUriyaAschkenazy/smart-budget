@@ -19,6 +19,7 @@ export default function AccountsPage() {
   const [name, setName] = useState('');
   const [type, setType] = useState<'bank' | 'credit_card'>('credit_card');
   const [provider, setProvider] = useState('max');
+  const [last4Digits, setLast4Digits] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,8 +46,9 @@ export default function AccountsPage() {
     setLoading(true);
 
     try {
-      await createAccountAction(name, type, provider);
+      await createAccountAction(name, type, provider, last4Digits);
       setName('');
+      setLast4Digits('');
       await loadData();
     } catch (err: any) {
       setError(err.message || 'שגיאה ביצירת החשבון');
@@ -91,7 +93,7 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* widget מעקב טעינה חודשית (Checklist) */}
+      {/* Checklist */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
         <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
           📋 מעקב קבצים שנטענו לחודש {selectedMonth}
@@ -112,7 +114,9 @@ export default function AccountsPage() {
               >
                 <div>
                   <p className="font-bold text-sm text-gray-800">{item.account.name}</p>
-                  <p className="text-xs text-gray-500 uppercase">{item.account.provider}</p>
+                  <p className="text-xs text-gray-500 uppercase">
+                    {item.account.provider} {item.account.last4Digits ? `(••${item.account.last4Digits})` : ''}
+                  </p>
                 </div>
 
                 <div className="text-left">
@@ -132,11 +136,11 @@ export default function AccountsPage() {
         )}
       </div>
 
-      {/* טופס הוספת חשבון חדש */}
+      {/* טופס הוספת חשבון */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
         <h2 className="text-lg font-bold text-gray-800">הוספת חשבון / כרטיס חדש</h2>
-        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-4 items-end">
-          <div className="flex-1 w-full">
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-4 items-end flex-wrap">
+          <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-semibold text-gray-700 mb-1">שם החשבון / הכרטיס</label>
             <input
               type="text"
@@ -171,8 +175,19 @@ export default function AccountsPage() {
               <option value="isracard">ישראכרט</option>
               <option value="cal">כאל / Cal</option>
               <option value="poalim">בנק הפועלים</option>
-              <option value="discount">בנק דיסקונט</option>
             </select>
+          </div>
+
+          <div className="w-full sm:w-28">
+            <label className="block text-xs font-semibold text-gray-700 mb-1">4 ספרות (רשות)</label>
+            <input
+              type="text"
+              maxLength={4}
+              value={last4Digits}
+              onChange={(e) => setLast4Digits(e.target.value.replace(/\D/g, ''))}
+              placeholder="1221"
+              className="w-full border border-gray-300 rounded-lg p-2 text-sm text-center focus:outline-none font-mono"
+            />
           </div>
 
           <button
@@ -185,7 +200,7 @@ export default function AccountsPage() {
         </form>
       </div>
 
-      {/* טבלת החשבונות */}
+      {/* טבלה */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-800">רשימת חשבונות מוגדרים ({accounts.length})</h2>
@@ -197,6 +212,7 @@ export default function AccountsPage() {
               <th className="px-6 py-3">שם החשבון</th>
               <th className="px-6 py-3">סוג</th>
               <th className="px-6 py-3">ספק</th>
+              <th className="px-6 py-3">4 ספרות</th>
               <th className="px-6 py-3 text-center">סטטוס</th>
               <th className="px-6 py-3 text-center">פעולות</th>
             </tr>
@@ -209,6 +225,7 @@ export default function AccountsPage() {
                   {acc.type === 'bank' ? '🏦 בנק' : '💳 כרטיס אשראי'}
                 </td>
                 <td className="px-6 py-4 uppercase font-semibold text-gray-600">{acc.provider}</td>
+                <td className="px-6 py-4 font-mono text-gray-800">{acc.last4Digits ? `••${acc.last4Digits}` : '-'}</td>
                 <td className="px-6 py-4 text-center">
                   <button
                     onClick={() => handleToggleActive(acc.id, acc.isActive)}
