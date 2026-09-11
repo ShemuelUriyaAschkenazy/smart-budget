@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 
 export interface ParsedTransaction {
   dateObj: Date;
@@ -6,22 +6,23 @@ export interface ParsedTransaction {
   amount: number;
 }
 
-export async function parseIsracardFile(workbook: ExcelJS.Workbook): Promise<ParsedTransaction[]> {
-  const worksheet = workbook.worksheets[0];
-  const parsedRows: ParsedTransaction[] = [];
+export async function parseIsracardFile(buffer: Buffer): Promise<ParsedTransaction[]> {
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
 
+  const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
+
+  const parsedRows: ParsedTransaction[] = [];
   let dateColIdx = -1;
   let descColIdx = -1;
   let amountColIdx = -1;
   let headerRowIdx = -1;
 
-  // 1. איתור דינמי של שורת הכותרות (שורה 12 בתמונה)
-  worksheet.eachRow((row, rowNumber) => {
-    if (headerRowIdx !== -1) return;
+  rows.forEach((row, rowNumber) => {
+    if (headerRowIdx !== -1 || !Array.isArray(row)) return;
 
-    const rowValues = Array.isArray(row.values) ? row.values : [];
-    const values = rowValues.map((v) => (v != null ? String(v).trim() : ''));
-
+    const values = row.map((v) => (v != null ? String(v).trim() : ''));
     const dateIdx = values.findIndex((v) => v && v.includes('תאריך רכישה'));
     const descIdx = values.findIndex((v) => v && v.includes('שם בית עסק'));
     const amountIdx = values.findIndex((v) => v && v.includes('סכום חיוב'));
@@ -34,21 +35,18 @@ export async function parseIsracardFile(workbook: ExcelJS.Workbook): Promise<Par
     }
   });
 
-  // 2. קריאת התנועות בטבלה
   if (headerRowIdx !== -1) {
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber <= headerRowIdx) return;
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!Array.isArray(row)) continue;
 
-      const values = Array.isArray(row.values) ? row.values : [];
-      const rawDate = values[dateColIdx];
+      const rawDate = row[dateColIdx];
+      const description = row[descColIdx] ? String(row[descColIdx]).trim() : '';
 
-      if (!rawDate) return;
+      if (!rawDate || !description || description.includes('סה"כ')) continue;
 
-      const description = values[descColIdx] ? String(values[descColIdx]).trim() : '';
-      if (!description || description.includes('סה"כ')) return;
-
-      const dateObj = parseExcelDate(rawDate);
-      const rawAmount = values[amountColIdx] != null ? String(values[amountColIdx]) : '';
+      const dateObj = parseDateString(String(rawDate));
+      const rawAmount = row[amountColIdx] != null ? String(row[amountColIdx]) : '';
       const cleanAmt = Number(rawAmount.replace(/[₪,\s]/g, ''));
 
       if (!isNaN(cleanAmt) && cleanAmt > 0) {
@@ -58,25 +56,19 @@ export async function parseIsracardFile(workbook: ExcelJS.Workbook): Promise<Par
           amount: -cleanAmt,
         });
       }
-    });
+    }
   }
 
   return parsedRows;
 }
 
-function parseExcelDate(val: any): Date {
-  if (val instanceof Date && !isNaN(val.getTime())) return val;
-  if (typeof val === 'number') {
-    return new Date(Math.round((val - 25569) * 86400 * 1000));
+function parseDateString(val: string): Date {
+  const trimmed = val.trim();
+  const parts = trimmed.split(/[\/.-]/);
+  if (parts.length === 3 && parts[0].length <= 2) {
+    const year = parts[2].length === 2 ? 2000 + parseInt(parts[2], 10) : parseInt(parts[2], 10);
+    return new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
   }
-  if (typeof val === 'string') {
-    const parts = val.trim().split(/[\/.-]/);
-    if (parts.length === 3 && parts[0].length <= 2) {
-      const year = parts[2].length === 2 ? 2000 + parseInt(parts[2], 10) : parseInt(parts[2], 10);
-      return new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-    }
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return new Date();
+  const d = new Date(val);
+  return !isNaN(d.getTime()) ? d : new Date();
 }

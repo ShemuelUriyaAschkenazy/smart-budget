@@ -6,10 +6,11 @@ import { usePathname } from 'next/navigation';
 export default function Navbar() {
   const pathname = usePathname();
 
-  const navItems = [
+const navItems = [
     { label: '📊 תנועות וסיווג', href: '/' },
     { label: '🔗 התאמת אשראי', href: '/reconciliation' },
     { label: '🎯 ניהול תקציב', href: '/budget' },
+    { label: '📂 היסטוריית העלאות', href: '/uploads' },
     { label: '🏦 חשבונות וכרטיסים', href: '/accounts' },
     { label: '🏷️ ניהול קטגוריות', href: '/categories' },
     { label: '⚙️ חוקי סיווג', href: '/rules' },
@@ -45,11 +46,10 @@ export default function Navbar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition ${
-                  isActive
+                className={`text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition ${isActive
                     ? 'bg-blue-50 text-blue-700 font-bold'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 {item.label}
               </Link>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   analyzeUploadedFile,
   commitTransactionsImport,
@@ -21,20 +22,24 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
   const [analysis, setAnalysis] = useState<FileAnalysisResult | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
 
+  const [successData, setSuccessData] = useState<{
+    count: number;
+    fileName: string;
+    rows: TransactionRow[];
+  } | null>(null);
+
   useEffect(() => {
     getAccounts(true).then((data) => {
       setAccounts(data);
     });
   }, []);
 
-  // סינון דינמי: רק חשבונות שמשויכים לספק שנבחר כרגע בשדה הראשון
   const availableAccounts = accounts.filter((acc) => acc.provider === selectedProvider);
 
-  // בעת החלפת ספק בשדה הראשון - נעדכן את שדה החשבון לברירת מחדל הגיונית
   const handleProviderChange = (provider: string) => {
     setSelectedProvider(provider);
     if (provider === 'max') {
-      setSelectedAccountId('ALL'); // ברירת מחדל למקס - מרוכז
+      setSelectedAccountId('ALL');
     } else {
       const filtered = accounts.filter((acc) => acc.provider === provider);
       setSelectedAccountId(filtered.length > 0 ? filtered[0].id : '');
@@ -70,12 +75,29 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
       const payload = includeDuplicates
         ? [...analysis.newRows, ...analysis.duplicateRows]
         : analysis.newRows;
-      const saved = await commitTransactionsImport(payload, selectedAccountId);
+
+      const currentFileName = analysis.fileName || 'קובץ נטען';
+
+      const saved = await commitTransactionsImport(
+        payload,
+        selectedAccountId,
+        currentFileName,
+        analysis.provider
+      );
+
       onDataParsed(saved);
+
+      // פתיחת מודל ההצלחה עם סיכום התנועות שנשמרו
+      setSuccessData({
+        count: saved.length,
+        fileName: currentFileName,
+        rows: saved,
+      });
+
       setAnalysis(null);
       setIncludeDuplicates(false);
     } catch (err) {
-      alert('שגיאה בשמירת התנועות.');
+      alert('אירעה שגיאה בשמירת הנתונים.');
     } finally {
       setLoading(false);
     }
@@ -85,7 +107,6 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
     <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100 mb-8 space-y-4">
       <h2 className="text-xl font-bold text-gray-800">1. העלאת קובץ תנועות</h2>
       <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-4 items-end">
-        {/* 1. קובץ */}
         <div className="flex-1 w-full">
           <label className="block text-sm font-medium text-gray-700 mb-1">קובץ אקסל (.xlsx)</label>
           <input
@@ -97,7 +118,6 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
           />
         </div>
 
-        {/* 2. ספק / מקור */}
         <div className="w-full sm:w-auto">
           <label className="block text-sm font-medium text-gray-700 mb-1">ספק / חברה</label>
           <select
@@ -112,7 +132,6 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
           </select>
         </div>
 
-        {/* 3. שיוך חשבון ספציפי (מסונן לפי הספק) */}
         <div className="w-full sm:w-auto">
           <label className="block text-sm font-medium text-gray-700 mb-1">שיוך חשבון</label>
           <select
@@ -120,12 +139,9 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
             onChange={(e) => setSelectedAccountId(e.target.value)}
             className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none bg-white font-semibold"
           >
-            {/* אופציה מרוכזת שקיימת ב-Max */}
             {selectedProvider === 'max' && (
               <option value="ALL">✨ כל הכרטיסים (פיצול לפי 4 ספרות)</option>
             )}
-
-            {/* רשימת הכרטיסים המוצגים בלעדית עבור הספק שנבחר */}
             {availableAccounts.map((acc) => (
               <option key={acc.id} value={acc.id}>
                 {acc.name} {acc.last4Digits ? `(••${acc.last4Digits})` : ''}
@@ -143,15 +159,13 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
         </button>
       </form>
 
-      {/* Preview Modal */}
+      {/* 1. מודל תצוגה מקדימה לפני יבוא */}
       {analysis && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-4 border border-gray-100 max-h-[85vh] flex flex-col">
             <div className="border-b pb-3">
               <h3 className="text-xl font-bold text-gray-900">תצוגה מקדימה - {analysis.sourceName}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                בדיקה מול כפילויות קיימות ב-Database.
-              </p>
+              <p className="text-xs text-gray-500 mt-1">בדיקה מול כפילויות קיימות ב-Database.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
@@ -179,7 +193,6 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
               </div>
             )}
 
-            {/* Checkbox ליבוא כפילויות */}
             {analysis.duplicateRows.length > 0 && (
               <div className="flex items-center gap-2 pt-2">
                 <input
@@ -213,6 +226,58 @@ export default function FileUpload({ onDataParsed }: FileUploadProps) {
                 className="px-5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition disabled:opacity-50"
               >
                 {loading ? 'שומר...' : 'אישור ויבוא'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. מודל אישור בסיום טעינה מוצלחת */}
+      {successData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full p-6 space-y-4 border border-gray-100 max-h-[85vh] flex flex-col">
+            <div className="border-b pb-3 flex items-center gap-3">
+              <span className="text-3xl">🎉</span>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">התנועות נטענו בהצלחה!</h3>
+                <p className="text-xs text-gray-500">
+                  נקלטו <span className="font-bold text-emerald-600">{successData.count}</span> תנועות מתוך הקובץ "{successData.fileName}"
+                </p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 border rounded-lg p-3 bg-gray-50 max-h-60">
+              <p className="text-xs font-bold text-gray-700 mb-2">פירוט התנועות שנקלטו כעת:</p>
+              {successData.rows.map((tx, idx) => (
+                <div key={idx} className="p-2 bg-white rounded border border-gray-200 text-xs flex justify-between items-center">
+                  <div>
+                    <span className="font-bold text-gray-800">{tx.description}</span>
+                    <span className="text-gray-400 mr-2">({tx.date})</span>
+                  </div>
+                  <div className="text-left">
+                    <span className="font-bold text-gray-900 dir-ltr block">₪{Number(tx.amount).toFixed(2)}</span>
+                    <span className="text-[10px] bg-blue-50 text-blue-700 font-semibold px-1.5 py-0.5 rounded">
+                      {tx.category}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t">
+              <Link
+                href="/uploads"
+                className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-4 py-2 rounded-lg transition flex items-center gap-1"
+              >
+                📂 צפה בכל ההעלאות בהיסטוריה ⬅
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setSuccessData(null)}
+                className="px-5 py-2 text-xs font-bold bg-gray-900 hover:bg-black text-white rounded-lg transition"
+              >
+                סגור ואישור
               </button>
             </div>
           </div>

@@ -22,14 +22,25 @@ model Category {
 }
 
 model FinancialAccount {
-  id           String        @id @default(cuid())
-  name         String        @unique
-  type         String        // "bank" | "credit_card"
-  provider     String        // "poalim", "max", "isracard", "cal"
-  last4Digits  String?       // 4 ספרות אחרונות (למשל: "1221", "3725")
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
+  id            String        @id @default(cuid())
+  name          String        @unique
+  type          String        // 'bank' | 'credit_card'
+  provider      String        // 'max' | 'isracard' | 'cal' | 'poalim'
+  last4Digits   String?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @default(now()) @updatedAt // <--- הוספת @default(now())
+  transactions  Transaction[]
+  importBatches ImportBatch[]
+}
 
+model ImportBatch {
+  id           String            @id @default(cuid())
+  createdAt    DateTime          @default(now())
+  fileName     String?
+  provider     String
+  accountId    String?
+  account      FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   transactions Transaction[]
 }
 
@@ -51,6 +62,9 @@ model Transaction {
 
   bankMatches      CreditMatch[]     @relation("BankTransaction")
   creditMatches    CreditMatch[]     @relation("CreditTransaction")
+
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
 }
 
 model CreditMatch {

@@ -28,6 +28,8 @@ export interface FileAnalysisResult {
   accountId: string;
   newRows: TransactionRow[];
   duplicateRows: TransactionRow[];
+  fileName?: string;
+  provider?: string;
 }
 
 function formatDateForUI(dateObj: Date): string {
@@ -110,36 +112,42 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
     if (account) sourceName = account.name;
   }
 
-  const buffer = await file.arrayBuffer();
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
 
   let parsedRows: { dateObj: Date; description: string; amount: number; accountId: string }[] = [];
 
-switch (provider) {
-    case 'max': {
-      const maxRows = await parseMaxFile(workbook, accountId);
-      parsedRows = maxRows;
-      break;
-    }
-    case 'isracard': {
-      const isracardRows = await parseIsracardFile(workbook);
-      parsedRows = isracardRows.map((r) => ({ ...r, accountId }));
-      break;
-    }
-    case 'cal': {
-      const calRows = await parseCalFile(workbook);
-      parsedRows = calRows.map((r) => ({ ...r, accountId }));
-      break;
-    }
-    case 'poalim':
-    default: {
-      const poalimRows = await parsePoalimFile(workbook);
-      parsedRows = poalimRows.map((r) => ({ ...r, accountId }));
-      break;
+  // 1. פענוח הקובץ לפי הספק
+  if (provider === 'isracard') {
+    // ישראכרט מעובד ישירות דרך SheetJS ללא תלות בפורמט הקובץ (HTML/XLS/XLSX)
+    const isracardRows = await parseIsracardFile(buffer);
+    parsedRows = isracardRows.map((r) => ({ ...r, accountId }));
+  } else {
+    // שאר הספקים מעובדים דרך ExcelJS
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    switch (provider) {
+      case 'max': {
+        const maxRows = await parseMaxFile(workbook, accountId);
+        parsedRows = maxRows;
+        break;
+      }
+      case 'cal': {
+        const calRows = await parseCalFile(workbook);
+        parsedRows = calRows.map((r) => ({ ...r, accountId }));
+        break;
+      }
+      case 'poalim':
+      default: {
+        const poalimRows = await parsePoalimFile(workbook);
+        parsedRows = poalimRows.map((r) => ({ ...r, accountId }));
+        break;
+      }
     }
   }
-  
+
+  // 2. זיהוי תנועות כפולות שכבר קיימות ב-Database
   const existingTx = await prisma.transaction.findMany({
     select: { date: true, description: true, amount: true },
   });
@@ -169,14 +177,32 @@ switch (provider) {
     }
   });
 
-  return { sourceName, accountId, newRows, duplicateRows };
+  return {
+    sourceName,
+    accountId,
+    newRows,
+    duplicateRows,
+    fileName: file.name,
+    provider,
+  };
 }
 
 export async function commitTransactionsImport(
   itemsToSave: TransactionRow[],
-  accountId: string
+  accountId: string,
+  fileName?: string,
+  provider?: string
 ): Promise<TransactionRow[]> {
   if (!itemsToSave || itemsToSave.length === 0) return [];
+
+  // 1. יצירת אצוות ההעלאה ב-Database
+  const batch = await prisma.importBatch.create({
+    data: {
+      fileName: fileName || 'קובץ נטען',
+      provider: provider || 'general',
+      accountId: accountId !== 'ALL' ? accountId : null,
+    },
+  });
 
   const existingCategories = await prisma.category.findMany();
   const regularRules = await prisma.rule.findMany({ include: { category: true } });
@@ -317,14 +343,15 @@ export async function commitTransactionsImport(
     }),
   ];
 
-  const savedTransactions = await Promise.all(
+const savedTransactions = await Promise.all(
     finalSavePayload.map((item) =>
       prisma.transaction.create({
         data: {
           date: item.dateObj,
           description: item.description,
           amount: item.amount,
-          accountId: accountId,
+          accountId: accountId !== 'ALL' ? accountId : null,
+          importBatchId: batch.id,
           monthKey: getMonthKey(item.dateObj),
           categoryId: item.categoryId,
           isMaaserEligible: item.isMaaserEligible,
@@ -351,8 +378,12 @@ export async function commitTransactionsImport(
 }
 
 export async function deleteTransactionAction(id: string) {
-  await prisma.transaction.delete({ where: { id } });
+  await prisma.transaction.delete({
+    where: { id },
+  });
+  revalidatePath('/uploads');
   revalidatePath('/');
+  revalidatePath('/budget');
 }
 
 export async function clearAllTransactionsAction() {
@@ -385,6 +416,29 @@ export async function toggleTransactionMaaserAction(transactionId: string, isEli
     data: { isMaaserEligible: isEligible },
   });
 
+  revalidatePath('/');
+  revalidatePath('/budget');
+}
+
+export async function getImportBatches() {
+  return await prisma.importBatch.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: {
+      account: { select: { name: true } },
+      transactions: {
+        orderBy: { date: 'desc' },
+        include: { category: true },
+      },
+      _count: { select: { transactions: true } },
+    },
+  });
+}
+
+export async function deleteImportBatchAction(batchId: string) {
+  // מחיקת האצווה תמחק אוטומטית את כל ה-Transactions המקושרות הודות ל-onDelete: Cascade ב-Prisma
+  await prisma.importBatch.delete({
+    where: { id: batchId },
+  });
   revalidatePath('/');
   revalidatePath('/budget');
 }
