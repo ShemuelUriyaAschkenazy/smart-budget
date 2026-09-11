@@ -122,25 +122,22 @@ export default function TransactionsTable({
               return (
                 <tr
                   key={item.id}
-                  className={`border-b transition ${
-                    isUncategorized ? 'bg-amber-50/40 hover:bg-amber-100/50' : 'bg-white hover:bg-gray-50'
-                  }`}
+                  className={`border-b transition ${isUncategorized ? 'bg-amber-50/40 hover:bg-amber-100/50' : 'bg-white hover:bg-gray-50'
+                    }`}
                 >
                   <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">{item.date}</td>
                   <td className="px-6 py-4">{item.description}</td>
                   <td className="px-6 py-4 font-semibold text-gray-800 dir-ltr text-right">
                     ₪{Number(item.amount).toFixed(2)}
                   </td>
-                  <td className="px-6 py-4">{item.source}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4">{item.accountName || 'חשבון כללי'}</td>                  <td className="px-6 py-4">
                     <select
                       value={item.category || 'ללא קטגוריה'}
                       onChange={(e) => handleSelectChange(item, e.target.value)}
-                      className={`border rounded-lg p-1.5 text-xs font-semibold focus:outline-none focus:ring-2 transition cursor-pointer ${
-                        isUncategorized
+                      className={`border rounded-lg p-1.5 text-xs font-semibold focus:outline-none focus:ring-2 transition cursor-pointer ${isUncategorized
                           ? 'bg-amber-100 text-amber-800 border-amber-300 focus:ring-amber-400'
                           : 'bg-emerald-50 text-emerald-800 border-emerald-300 focus:ring-emerald-400'
-                      }`}
+                        }`}
                     >
                       {categories.map((c) => (
                         <option key={c.id} value={c.name} className="bg-white text-gray-800 font-normal">
@@ -153,11 +150,10 @@ export default function TransactionsTable({
                     {showMaaserToggle ? (
                       <button
                         onClick={() => handleToggleMaaser(item)}
-                        className={`text-xs font-bold px-2.5 py-1 rounded transition border ${
-                          item.isMaaserEligible
+                        className={`text-xs font-bold px-2.5 py-1 rounded transition border ${item.isMaaserEligible
                             ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
                             : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'
-                        }`}
+                          }`}
                         title="לחץ כדי לשנות האם תנועה זו מחושבת למעשר"
                       >
                         {item.isMaaserEligible ? '🪙 מחושב' : 'לא מחושב'}

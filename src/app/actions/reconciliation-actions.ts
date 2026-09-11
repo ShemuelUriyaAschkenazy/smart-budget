@@ -57,7 +57,7 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
         in: [monthKey, previousMonthKey],
       },
     },
-    include: { category: true },
+    include: { category: true, account: true }, // <--- הוסף את account: true
     orderBy: { date: 'desc' },
   });
 
@@ -83,11 +83,14 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
   let unmatchedCreditTotal = 0;
 
   transactions.forEach((t) => {
-    const isBankCharge =
+    const isCreditCardSummaryCharge =
       t.category?.isNeutralized || t.category?.name === 'כיסוי חיוב אשראי (מנוטרל)';
     const amt = Math.abs(Number(t.amount));
 
-    if (isBankCharge && t.monthKey === monthKey) {
+    const sourceName = t.account?.name || t.account?.provider || 'ללא חשבון מקושר';
+    const isBankAccount = t.account?.type === 'bank';
+
+    if (isCreditCardSummaryCharge && t.monthKey === monthKey) {
       const match = matches.find((m) => m.bankTransactionId === t.id);
       const isMatched = matchedBankIds.has(t.id);
 
@@ -98,12 +101,12 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
         date: formatDateForUI(new Date(t.date)),
         description: t.description,
         amount: amt,
-        source: t.source || 'בנק',
+        source: sourceName, // <--- עדכון כאן
         isMatched,
         matchedToId: match?.creditTransactionId,
         matchedToDescription: match?.creditTransaction?.description,
       });
-    } else if (!isBankCharge && t.source && t.source !== 'בנק הפועלים' && t.source !== 'בנק דיסקונט') {
+    } else if (!isCreditCardSummaryCharge && !isBankAccount) {
       const match = matches.find((m) => m.creditTransactionId === t.id);
       const isMatched = matchedCreditIds.has(t.id);
 
@@ -116,7 +119,7 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
         date: formatDateForUI(new Date(t.date)),
         description: `${t.description}${isPrevMonth ? ' (חודש קודם)' : ''}`,
         amount: amt,
-        source: t.source,
+        source: sourceName, // <--- עדכון כאן (sourceName במקום t.source)
         isMatched,
         matchedToId: match?.bankTransactionId,
         matchedToDescription: match?.bankTransaction?.description,

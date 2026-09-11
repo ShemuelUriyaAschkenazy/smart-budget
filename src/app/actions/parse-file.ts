@@ -113,7 +113,7 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
   }
 
   const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  const buffer = Buffer.from(arrayBuffer) as any;;
 
   let parsedRows: { dateObj: Date; description: string; amount: number; accountId: string }[] = [];
 
