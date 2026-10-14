@@ -2,7 +2,7 @@
 
 import { prisma } from '../../lib/prisma';
 import { revalidatePath } from 'next/cache';
-
+import { revalidateTag, unstable_cache } from 'next/cache';
 export interface CategoryItem {
   id: string;
   name: string;
@@ -15,26 +15,30 @@ export interface CategoryItem {
   };
 }
 
-export async function getCategories(): Promise<CategoryItem[]> {
-  const categories = await prisma.category.findMany({
-    orderBy: { name: 'asc' },
-    include: {
-      _count: {
-        select: { transactions: true },
+export const getCategories = unstable_cache(
+  async (): Promise<CategoryItem[]> => {
+    const categories = await prisma.category.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: { transactions: true },
+        },
       },
-    },
-  });
+    });
 
-  return categories.map((c) => ({
-    id: String(c.id),
-    name: c.name,
-    type: c.type,
-    isMaaserEligible: c.isMaaserEligible,
-    expectedAmount: c.expectedAmount ? Number(c.expectedAmount) : null,
-    currentBalance: c.currentBalance ? Number(c.currentBalance) : null,
-    _count: c._count,
-  }));
-}
+    return categories.map((c) => ({
+      id: String(c.id),
+      name: c.name,
+      type: c.type,
+      isMaaserEligible: c.isMaaserEligible,
+      expectedAmount: c.expectedAmount ? Number(c.expectedAmount) : null,
+      currentBalance: c.currentBalance ? Number(c.currentBalance) : null,
+      _count: c._count,
+    }));
+  },
+  ['categories-cache-key'],
+  { revalidate: 3600, tags: ['categories'] }
+);
 
 export async function createCategoryAction(name: string, type: 'expense' | 'income' | 'savings' | 'donations', isMaaserEligible: boolean = true) {
   if (!name.trim()) throw new Error('שם הקטגוריה אינו יכול להיות ריק');

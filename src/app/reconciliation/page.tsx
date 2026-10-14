@@ -10,7 +10,7 @@ import {
 } from '../actions/reconciliation-actions';
 
 export default function ReconciliationPage() {
-  const [selectedMonth, setSelectedMonth] = useState('2026-08');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [data, setData] = useState<ReconciliationOverview | null>(null);
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);

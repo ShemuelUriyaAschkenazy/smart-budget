@@ -17,7 +17,7 @@ export default function Home() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<string>('2026-08');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [selectedSource, setSelectedSource] = useState<string>('ALL');
 
   const loadData = async (monthKey: string, source: string) => {

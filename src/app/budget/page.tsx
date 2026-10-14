@@ -10,7 +10,7 @@ import {
 } from '../actions/budget-actions';
 
 export default function BudgetPage() {
-  const [selectedMonth, setSelectedMonth] = useState('2026-08');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [data, setData] = useState<MonthlyOverview | null>(null);
   const [editingBudgets, setEditingBudgets] = useState<{ [key: number]: number }>({});
   const [showMaaserSettings, setShowMaaserSettings] = useState(false);

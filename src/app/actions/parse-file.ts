@@ -69,7 +69,7 @@ export async function getTransactions(monthKey?: string, accountId?: string): Pr
   }));
 }
 
-export async function isCreditCardChargeDescription(description: string): Promise<boolean> {
+function isCreditCardChargeDescription(description: string): boolean {
   if (!description) return false;
 
   const cleanDesc = description
@@ -147,35 +147,48 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
     }
   }
 
-  // 2. זיהוי תנועות כפולות שכבר קיימות ב-Database
-  const existingTx = await prisma.transaction.findMany({
-    select: { date: true, description: true, amount: true },
-  });
-
-  const existingSet = new Set(
-    existingTx.map((t) => `${t.date.toISOString().split('T')[0]}_${t.description.trim()}_${Number(t.amount)}`)
-  );
-
+  // 2. זיהוי תנועות כפולות - שליפה ממוקדת לפי טווח תאריכים
   const newRows: TransactionRow[] = [];
   const duplicateRows: TransactionRow[] = [];
 
-  parsedRows.forEach((r) => {
-    const key = `${r.dateObj.toISOString().split('T')[0]}_${r.description.trim()}_${r.amount}`;
-    const rowData: TransactionRow = {
-      date: formatDateForUI(r.dateObj),
-      rawDate: r.dateObj.toISOString(),
-      description: r.description,
-      amount: r.amount,
-      accountId: r.accountId,
-      accountName: sourceName,
-    };
+  if (parsedRows.length > 0) {
+    const dates = parsedRows.map((r) => r.dateObj.getTime());
+    const minDate = new Date(Math.min(...dates));
+    const maxDate = new Date(Math.max(...dates));
 
-    if (existingSet.has(key)) {
-      duplicateRows.push(rowData);
-    } else {
-      newRows.push(rowData);
-    }
-  });
+    // שולף מה-DB רק תנועות מהטווח הרלוונטי
+    const existingTx = await prisma.transaction.findMany({
+      where: {
+        date: {
+          gte: minDate,
+          lte: maxDate,
+        },
+      },
+      select: { date: true, description: true, amount: true },
+    });
+
+    const existingSet = new Set(
+      existingTx.map((t) => `${t.date.toISOString().split('T')[0]}_${t.description.trim()}_${Number(t.amount)}`)
+    );
+
+    parsedRows.forEach((r) => {
+      const key = `${r.dateObj.toISOString().split('T')[0]}_${r.description.trim()}_${r.amount}`;
+      const rowData: TransactionRow = {
+        date: formatDateForUI(r.dateObj),
+        rawDate: r.dateObj.toISOString(),
+        description: r.description,
+        amount: r.amount,
+        accountId: r.accountId,
+        accountName: sourceName,
+      };
+
+      if (existingSet.has(key)) {
+        duplicateRows.push(rowData);
+      } else {
+        newRows.push(rowData);
+      }
+    });
+  }
 
   return {
     sourceName,
@@ -235,7 +248,7 @@ export async function commitTransactionsImport(
   const unclassifiedForAI: any[] = [];
 
   for (const row of itemsToSave) {
-    const isCreditCardTransfer = await isCreditCardChargeDescription(row.description);
+    const isCreditCardTransfer = isCreditCardChargeDescription(row.description);
     const dateObj = row.rawDate ? new Date(row.rawDate) : new Date(row.date);
 
     if (isCreditCardTransfer) {
@@ -276,52 +289,64 @@ export async function commitTransactionsImport(
   let aiClassifiedItems: any[] = [];
 
   if (unclassifiedForAI.length > 0) {
-    const allowedCategories = Array.from(categoryMap.keys());
-    const activeAIRules = await prisma.aIRule.findMany({
-      where: { OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }] },
-    });
+    try {
+      const allowedCategories = Array.from(categoryMap.keys());
+      const activeAIRules = await prisma.aIRule.findMany({
+        where: { OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }] },
+      });
 
-    const dynamicInstructions = activeAIRules
-      .filter((r) => r.ruleType === 'prompt_instruction' && r.instructionText)
-      .map((r) => `- ${r.instructionText}`)
-      .join('\n');
+      const dynamicInstructions = activeAIRules
+        .filter((r) => r.ruleType === 'prompt_instruction' && r.instructionText)
+        .map((r) => `- ${r.instructionText}`)
+        .join('\n');
 
-    const systemInstruction = `
-אתה עוזר פיננסי אישי המסווג תנועות בעברית.
-אתה מורשה לבחור קטגוריה אך ורק מתוך הרשימה הסגורה הבאה:
+      const systemInstruction = `
+You are a personal finance assistant categorizing Israeli financial transactions.
+
+Allowed Categories (STRICT LIST):
 [${allowedCategories.join(', ')}]
 
-חוקי ברזל חובתיים:
-1. במידה ותיאור התנועה מכיל חיובי אשראי (כמו: "ישראכרט", "מקס", "כאל", "כרטיסי אשראי", "ויזה"), חובה לבחור בדיוק בקטגוריה: "כיסוי חיוב אשראי (מנוטרל)".
-2. ${dynamicInstructions || 'אין חוקים דינמיים נוספים.'}
+Rules:
+1. Credit card bill coverages (e.g., "ישראכרט", "מקס", "כאל", "כרטיסי אשראי", "ויזה") MUST be categorized EXACTLY as: "כיסוי חיוב אשראי (מנוטרל)".
+2. Custom User Rules:
+${dynamicInstructions || 'None'}
 
-אם תיאור התנועה אינו מתאים בצורה ברורה לאף אחת מהקטגוריות, בחר בדיוק ב: "ללא קטגוריה".
-אל תמציא קטגוריות חדשות בשום אופן.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: `סווג את התנועות הבאות: ${JSON.stringify(unclassifiedForAI)}`,
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              date: { type: Type.STRING },
-              description: { type: Type.STRING },
-              amount: { type: Type.NUMBER },
-              category: { type: Type.STRING },
+3. If a transaction description is ambiguous, unclear, or doesn't match any category, select EXACTLY: "ללא קטגוריה".
+4. NEVER invent new categories. Output MUST match one of the allowed categories verbatim.
+`;
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: `סווג את התנועות הבאות: ${JSON.stringify(unclassifiedForAI)}`,
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                date: { type: Type.STRING },
+                description: { type: Type.STRING },
+                amount: { type: Type.NUMBER },
+                category: { type: Type.STRING },
+              },
+              required: ['date', 'description', 'amount', 'category'],
             },
-            required: ['date', 'description', 'amount', 'category'],
           },
         },
-      },
-    });
+      });
 
-    aiClassifiedItems = JSON.parse(response.text || '[]');
+      if (response.text) {
+        aiClassifiedItems = JSON.parse(response.text);
+      }
+    } catch (err) {
+      console.error('שגיאה בסיווג AI (מבצע fallback ל"ללא קטגוריה"):', err);
+      // במידה וה-AI נכשל, התנועות ייקלטו כ"ללא קטגוריה" במקום להפיל את כל הקובץ
+      aiClassifiedItems = unclassifiedForAI.map((item) => ({
+        ...item,
+        category: 'ללא קטגוריה',
+      }));
+    }
   }
 
   const finalSavePayload = [
@@ -343,23 +368,29 @@ export async function commitTransactionsImport(
     }),
   ];
 
-const savedTransactions = await Promise.all(
-    finalSavePayload.map((item) =>
-      prisma.transaction.create({
-        data: {
-          date: item.dateObj,
-          description: item.description,
-          amount: item.amount,
-          accountId: accountId !== 'ALL' ? accountId : null,
-          importBatchId: batch.id,
-          monthKey: getMonthKey(item.dateObj),
-          categoryId: item.categoryId,
-          isMaaserEligible: item.isMaaserEligible,
-        },
-        include: { category: true, account: true },
-      })
-    )
-  );
+  // הכנת הנתונים לשמירה מרוכזת בשאילתה אחת (Bulk)
+  const transactionsToCreate = finalSavePayload.map((item) => ({
+    date: item.dateObj,
+    description: item.description,
+    amount: item.amount,
+    accountId: accountId !== 'ALL' ? accountId : null,
+    importBatchId: batch.id,
+    monthKey: getMonthKey(item.dateObj),
+    categoryId: item.categoryId,
+    isMaaserEligible: item.isMaaserEligible,
+  }));
+
+  // שמירת כל התנועות בשאילתת INSERT אחת בודדת מול Neon!
+  await prisma.transaction.createMany({
+    data: transactionsToCreate,
+  });
+
+  // שליפת התנועות שנוצרו באצווה זו להחזרה ל-UI
+  const savedTransactions = await prisma.transaction.findMany({
+    where: { importBatchId: batch.id },
+    include: { category: true, account: true },
+    orderBy: { date: 'desc' },
+  });
 
   revalidatePath('/');
   revalidatePath('/budget');
