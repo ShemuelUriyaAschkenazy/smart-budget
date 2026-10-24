@@ -58,7 +58,7 @@ model Transaction {
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   // null = יורש מהקטגוריה, true/false = נערך ידנית בתנועה
-  countInMaaser Boolean? // במקום isMaaserEligible
+  countInMaaser Boolean?
   createdAt     DateTime @default(now())
 
   bankMatches   CreditMatch[] @relation("BankTransaction")

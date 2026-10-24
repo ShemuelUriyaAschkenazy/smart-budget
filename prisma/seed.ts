@@ -12,7 +12,7 @@ async function main() {
     create: {
       name: 'כיסוי חיוב אשראי (מנוטרל)',
       type: 'transfer',
-      isMaaserEligible: false,
+      countInMaaserDefault: false,
       isNeutralized: true,
     },
   });
@@ -23,7 +23,7 @@ async function main() {
     create: {
       name: 'העברה פנימית (מנוטרל)',
       type: 'transfer',
-      isMaaserEligible: false,
+      countInMaaserDefault: false,
       isNeutralized: true,
     },
   });
@@ -35,24 +35,24 @@ async function main() {
     create: {
       name: 'ללא קטגוריה',
       type: 'expense',
-      isMaaserEligible: false,
+      countInMaaserDefault: false,
       isNeutralized: false,
     },
   });
 
   // 3. קטגוריות ברירת מחדל נפוצות (עם הגדרת סוג מתאימה)
   const defaultCategories = [
-    { name: 'מזון וסופרמרקט', type: 'expense', isMaaserEligible: false },
-    { name: 'חטיפים ומסעדות', type: 'expense', isMaaserEligible: false },
-    { name: 'דיור ומגורים', type: 'expense', isMaaserEligible: false },
-    { name: 'תחבורה ודלק', type: 'expense', isMaaserEligible: false },
-    { name: 'משכנתא / שכר דירה', type: 'expense', isMaaserEligible: false },
-    { name: 'השקעות וחיסכון', type: 'savings', isMaaserEligible: false },
-    { name: 'חשבונות ומיסים', type: 'expense', isMaaserEligible: false },
-    { name: 'קניות וביגוד', type: 'expense', isMaaserEligible: false },
-    { name: 'בריאות ופנאי', type: 'expense', isMaaserEligible: false },
-    { name: 'משכורת והכנסה', type: 'income', isMaaserEligible: true },
-    { name: 'תרומות ומעשרות', type: 'donations', isMaaserEligible: true },
+    { name: 'מזון וסופרמרקט', type: 'expense', countInMaaserDefault: false },
+    { name: 'חטיפים ומסעדות', type: 'expense', countInMaaserDefault: false },
+    { name: 'דיור ומגורים', type: 'expense', countInMaaserDefault: false },
+    { name: 'תחבורה ודלק', type: 'expense', countInMaaserDefault: false },
+    { name: 'משכנתא / שכר דירה', type: 'expense', countInMaaserDefault: false },
+    { name: 'השקעות וחיסכון', type: 'savings', countInMaaserDefault: false },
+    { name: 'חשבונות ומיסים', type: 'expense', countInMaaserDefault: false },
+    { name: 'קניות וביגוד', type: 'expense', countInMaaserDefault: false },
+    { name: 'בריאות ופנאי', type: 'expense', countInMaaserDefault: false },
+    { name: 'משכורת והכנסה', type: 'income', countInMaaserDefault: true },
+    { name: 'תרומות ומעשרות', type: 'donations', countInMaaserDefault: true },
   ];
 
   for (const cat of defaultCategories) {
@@ -62,7 +62,7 @@ async function main() {
       create: {
         name: cat.name,
         type: cat.type,
-        isMaaserEligible: cat.isMaaserEligible,
+        countInMaaserDefault: cat.countInMaaserDefault,
       },
     });
   }
