@@ -2,12 +2,13 @@
 
 import { prisma } from '../../lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { revalidateTag, unstable_cache } from 'next/cache';
+import { unstable_cache } from 'next/cache';
+
 export interface CategoryItem {
   id: string;
   name: string;
   type: string;
-  isMaaserEligible: boolean;
+  countInMaaserDefault: boolean;
   expectedAmount?: number | null;
   currentBalance?: number | null;
   _count?: {
@@ -30,7 +31,7 @@ export const getCategories = unstable_cache(
       id: String(c.id),
       name: c.name,
       type: c.type,
-      isMaaserEligible: c.isMaaserEligible,
+      countInMaaserDefault: c.countInMaaserDefault,
       expectedAmount: c.expectedAmount ? Number(c.expectedAmount) : null,
       currentBalance: c.currentBalance ? Number(c.currentBalance) : null,
       _count: c._count,
@@ -40,7 +41,11 @@ export const getCategories = unstable_cache(
   { revalidate: 3600, tags: ['categories'] }
 );
 
-export async function createCategoryAction(name: string, type: 'expense' | 'income' | 'savings' | 'donations', isMaaserEligible: boolean = true) {
+export async function createCategoryAction(
+  name: string,
+  type: 'expense' | 'income' | 'savings' | 'donations',
+  countInMaaserDefault: boolean = true
+) {
   if (!name.trim()) throw new Error('שם הקטגוריה אינו יכול להיות ריק');
 
   const existing = await prisma.category.findUnique({
@@ -55,7 +60,38 @@ export async function createCategoryAction(name: string, type: 'expense' | 'inco
     data: {
       name: name.trim(),
       type,
-      isMaaserEligible,
+      countInMaaserDefault,
+    },
+  });
+
+  revalidatePath('/categories');
+  revalidatePath('/rules');
+  revalidatePath('/budget');
+  revalidatePath('/');
+}
+
+export async function updateCategoryAction(
+  id: string,
+  name: string,
+  type: 'expense' | 'income' | 'savings' | 'donations',
+  countInMaaserDefault: boolean
+) {
+  if (!name.trim()) throw new Error('שם הקטגוריה אינו יכול להיות ריק');
+
+  const existing = await prisma.category.findUnique({
+    where: { name: name.trim() },
+  });
+
+  if (existing && existing.id !== Number(id)) {
+    throw new Error('קטגוריה אחרת בשם זה כבר קיימת במערכת');
+  }
+
+  await prisma.category.update({
+    where: { id: Number(id) },
+    data: {
+      name: name.trim(),
+      type,
+      countInMaaserDefault,
     },
   });
 

@@ -3,22 +3,22 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
 model Category {
-  id               Int           @id @default(autoincrement())
-  name             String        @unique
-  type             String        @default("expense")
-  isMaaserEligible Boolean       @default(true)
-  isNeutralized    Boolean       @default(false)
-  expectedAmount   Decimal?
-  currentBalance   Decimal?
-  transactions     Transaction[]
-  rules            Rule[]
-  budgets          Budget[]
+  id                   Int           @id @default(autoincrement())
+  name                 String        @unique
+  type                 String        @default("expense")
+  countInMaaserDefault Boolean       @default(true)
+  isNeutralized        Boolean       @default(false)
+  expectedAmount       Decimal?
+  currentBalance       Decimal?
+  transactions         Transaction[]
+  rules                Rule[]
+  budgets              Budget[]
 }
 
 model FinancialAccount {
@@ -29,7 +29,7 @@ model FinancialAccount {
   last4Digits   String?
   isActive      Boolean       @default(true)
   createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @default(now()) @updatedAt // <--- הוספת @default(now())
+  updatedAt     DateTime      @default(now()) @updatedAt
   transactions  Transaction[]
   importBatches ImportBatch[]
 }
@@ -45,23 +45,24 @@ model ImportBatch {
 }
 
 model Transaction {
-  id               String            @id @default(cuid())
-  date             DateTime
-  description      String
-  amount           Decimal
-  monthKey         String
-  
-  // קישור יחיד ומדויק לחשבון
-  accountId        String?
-  account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  id          String   @id @default(cuid())
+  date        DateTime
+  description String
+  amount      Decimal
+  monthKey    String
 
-  categoryId       Int
-  category         Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  isMaaserEligible Boolean           @default(true)
-  createdAt        DateTime          @default(now())
+  accountId String?
+  account   FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
-  bankMatches      CreditMatch[]     @relation("BankTransaction")
-  creditMatches    CreditMatch[]     @relation("CreditTransaction")
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // null = יורש מהקטגוריה, true/false = נערך ידנית בתנועה
+  countInMaaser Boolean? // במקום isMaaserEligible
+  createdAt     DateTime @default(now())
+
+  bankMatches   CreditMatch[] @relation("BankTransaction")
+  creditMatches CreditMatch[] @relation("CreditTransaction")
 
   importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: Cascade)

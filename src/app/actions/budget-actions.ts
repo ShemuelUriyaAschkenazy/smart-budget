@@ -80,7 +80,6 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
     const donationItems: BudgetVsActualItem[] = [];
 
     categories.forEach((cat) => {
-      // התעלמות מקטגוריות מנוטרלות (כמו כיסוי חיוב אשראי)
       if (cat.isNeutralized || cat.name === 'כיסוי חיוב אשראי (מנוטרל)') {
         return;
       }
@@ -93,9 +92,12 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
           const amt = Math.abs(Number(t.amount));
           actualAmount += amt;
 
-          if (cat.type === 'income' && t.isMaaserEligible) {
+          // חישוב זכאות למעשר: דריסה ידנית קודמת, ואם null יורש מברירת המחדל של הקטגוריה
+          const shouldCount = t.countInMaaser ?? cat.countInMaaserDefault;
+
+          if (cat.type === 'income' && shouldCount) {
             monthMaaserEligibleIncome += amt;
-          } else if (cat.type === 'donations' && t.isMaaserEligible) {
+          } else if (cat.type === 'donations' && shouldCount) {
             monthMaaserEligibleDonations += amt;
           }
         });

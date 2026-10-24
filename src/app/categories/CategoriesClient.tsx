@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   getCategories,
   createCategoryAction,
+  updateCategoryAction,
   deleteCategoryAction,
   CategoryItem,
 } from '../actions/categories-actions';
@@ -17,10 +18,16 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
   const [categories, setCategories] = useState<CategoryItem[]>(initialCategories);
   const [name, setName] = useState('');
   const [type, setType] = useState<'expense' | 'income' | 'savings' | 'donations'>('expense');
-  const [isMaaserEligible, setIsMaaserEligible] = useState(true);
+  const [countInMaaserDefault, setCountInMaaserDefault] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // State עבור מודל העריכה
+  const [editingCat, setEditingCat] = useState<CategoryItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState<'expense' | 'income' | 'savings' | 'donations'>('expense');
+  const [editCountInMaaserDefault, setEditCountInMaaserDefault] = useState(true);
 
   const refreshCategories = async () => {
     try {
@@ -38,12 +45,38 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
     setLoading(true);
 
     try {
-      await createCategoryAction(name, type, isMaaserEligible);
+      await createCategoryAction(name, type, countInMaaserDefault);
       setName('');
       setSuccess('הקטגוריה נוצרה בהצלחה!');
       await refreshCategories();
     } catch (err: any) {
       setError(err.message || 'שגיאה ביצירת הקטגוריה');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenEdit = (cat: CategoryItem) => {
+    setError(null);
+    setSuccess(null);
+    setEditingCat(cat);
+    setEditName(cat.name);
+    setEditType(cat.type as any);
+    setEditCountInMaaserDefault(cat.countInMaaserDefault);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingCat) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      await updateCategoryAction(editingCat.id, editName, editType, editCountInMaaserDefault);
+      setSuccess(`הקטגוריה "${editName}" עודכנה בהצלחה!`);
+      setEditingCat(null);
+      await refreshCategories();
+    } catch (err: any) {
+      setError(err.message || 'שגיאה בעדכון הקטגוריה');
     } finally {
       setLoading(false);
     }
@@ -94,6 +127,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
         </div>
       )}
 
+      {/* טופס הוספה */}
       <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 mb-8 space-y-4">
         <h2 className="text-lg font-bold text-gray-800">הוספת קטגוריה חדשה</h2>
         <form onSubmit={handleAdd} className="space-y-4">
@@ -138,8 +172,8 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
               <input
                 type="checkbox"
                 id="isMaaser"
-                checked={isMaaserEligible}
-                onChange={(e) => setIsMaaserEligible(e.target.checked)}
+                checked={countInMaaserDefault}
+                onChange={(e) => setCountInMaaserDefault(e.target.checked)}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
               />
               <label htmlFor="isMaaser" className="text-xs text-gray-700 font-semibold cursor-pointer">
@@ -152,6 +186,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
         </form>
       </div>
 
+      {/* טבלת קטגוריות */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-800">רשימת קטגוריות קיימות ({categories.length})</h2>
@@ -163,7 +198,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
               <tr>
                 <th className="px-6 py-3">שם הקטגוריה</th>
                 <th className="px-6 py-3">סוג</th>
-                <th className="px-6 py-3">מעשר כספים</th>
+                <th className="px-6 py-3">חישוב מעשר כספים</th>
                 <th className="px-6 py-3 text-center">פעולות</th>
               </tr>
             </thead>
@@ -186,23 +221,33 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded ${cat.isMaaserEligible ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'
-                          }`}
+                        className={`text-xs font-bold px-2 py-0.5 rounded ${
+                          cat.countInMaaserDefault ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'
+                        }`}
                       >
-                        {cat.isMaaserEligible ? 'מוכר/חייב' : 'לא מחושב'}
+                        {cat.countInMaaserDefault ? 'מחושב כברירת מחדל' : 'לא מחושב'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => handleDelete(cat.id, cat.name)}
-                        className={`text-xs font-semibold px-3 py-1 rounded transition ${count > 0
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-red-50 hover:bg-red-100 text-red-600'
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleOpenEdit(cat)}
+                          className="text-xs font-semibold px-3 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 transition"
+                        >
+                          ערוך
+                        </button>
+                        <button
+                          onClick={() => handleDelete(cat.id, cat.name)}
+                          className={`text-xs font-semibold px-3 py-1 rounded transition ${
+                            count > 0
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-red-50 hover:bg-red-100 text-red-600'
                           }`}
-                        title={count > 0 ? 'לא ניתן למחוק קטגוריה מקושרת לתנועות' : 'מחק קטגוריה'}
-                      >
-                        מחק
-                      </button>
+                          title={count > 0 ? 'לא ניתן למחוק קטגוריה מקושרת לתנועות' : 'מחק קטגוריה'}
+                        >
+                          מחק
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -211,6 +256,83 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
           </table>
         </div>
       </div>
+
+      {/* מודל פופאפ אזהרה ועריכת קטגוריה */}
+      {editingCat && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="border-b pb-3">
+              <h3 className="text-lg font-bold text-gray-900">עריכת קטגוריה: {editingCat.name}</h3>
+              <div className="mt-2 p-3 bg-amber-50 border-r-4 border-amber-500 rounded text-amber-900 text-xs leading-relaxed">
+                <span className="font-bold block mb-0.5">⚠️ שים לב:</span>
+                קטגוריה זו משויכת כעת ל-<strong>{editingCat._count?.transactions || 0}</strong> תנועות.
+                שינוי שם הקטגוריה או הגדרת המעשר ישפיע רטרואקטיבית על כל התנועות שמשויכות אליה (מלבד תנועות שהוגדרו ידנית)!
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">שם הקטגוריה</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">סוג הקטגוריה</label>
+                <select
+                  value={editType}
+                  onChange={(e) => setEditType(e.target.value as any)}
+                  className="w-full border rounded-lg p-2 text-sm bg-white focus:outline-none"
+                >
+                  <option value="expense">הוצאה שוטפת</option>
+                  <option value="income">הכנסה</option>
+                  <option value="savings">חיסכון / השקעה</option>
+                  <option value="donations">תרומות ומעשרות</option>
+                </select>
+              </div>
+
+              {(editType === 'income' || editType === 'donations') && (
+                <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                  <input
+                    type="checkbox"
+                    id="editCountInMaaser"
+                    checked={editCountInMaaserDefault}
+                    onChange={(e) => setEditCountInMaaserDefault(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="editCountInMaaser" className="text-xs font-semibold text-gray-700 cursor-pointer">
+                    🪙 לחשב במעשר כספים כברירת מחדל
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setEditingCat(null)}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSaveEdit}
+                className="px-4 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition disabled:opacity-50"
+              >
+                {loading ? 'מעדכן...' : 'אשר עריכה והחל שינויים'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

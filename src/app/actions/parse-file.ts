@@ -20,7 +20,7 @@ export interface TransactionRow {
   accountId?: string;
   accountName?: string;
   category?: string;
-  isMaaserEligible?: boolean;
+  countInMaaser?: boolean | null;
 }
 
 export interface FileAnalysisResult {
@@ -65,7 +65,7 @@ export async function getTransactions(monthKey?: string, accountId?: string): Pr
     accountId: t.accountId || undefined,
     accountName: t.account?.name || 'חשבון כללי',
     category: t.category?.name || 'ללא קטגוריה',
-    isMaaserEligible: t.isMaaserEligible,
+    countInMaaser: t.countInMaaser,
   }));
 }
 
@@ -113,17 +113,14 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
   }
 
   const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer) as any;;
+  const buffer = Buffer.from(arrayBuffer) as any;
 
   let parsedRows: { dateObj: Date; description: string; amount: number; accountId: string }[] = [];
 
-  // 1. פענוח הקובץ לפי הספק
   if (provider === 'isracard') {
-    // ישראכרט מעובד ישירות דרך SheetJS ללא תלות בפורמט הקובץ (HTML/XLS/XLSX)
     const isracardRows = await parseIsracardFile(buffer);
     parsedRows = isracardRows.map((r) => ({ ...r, accountId }));
   } else {
-    // שאר הספקים מעובדים דרך ExcelJS
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
 
@@ -147,7 +144,6 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
     }
   }
 
-  // 2. זיהוי תנועות כפולות - שליפה ממוקדת לפי טווח תאריכים
   const newRows: TransactionRow[] = [];
   const duplicateRows: TransactionRow[] = [];
 
@@ -156,7 +152,6 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
     const minDate = new Date(Math.min(...dates));
     const maxDate = new Date(Math.max(...dates));
 
-    // שולף מה-DB רק תנועות מהטווח הרלוונטי
     const existingTx = await prisma.transaction.findMany({
       where: {
         date: {
@@ -208,7 +203,6 @@ export async function commitTransactionsImport(
 ): Promise<TransactionRow[]> {
   if (!itemsToSave || itemsToSave.length === 0) return [];
 
-  // 1. יצירת אצוות ההעלאה ב-Database
   const batch = await prisma.importBatch.create({
     data: {
       fileName: fileName || 'קובץ נטען',
@@ -226,7 +220,7 @@ export async function commitTransactionsImport(
       data: {
         name: 'כיסוי חיוב אשראי (מנוטרל)',
         type: 'transfer',
-        isMaaserEligible: false,
+        countInMaaserDefault: false,
         isNeutralized: true,
       },
     });
@@ -235,14 +229,16 @@ export async function commitTransactionsImport(
   let defaultCategory = existingCategories.find((c) => c.name === 'ללא קטגוריה');
   if (!defaultCategory) {
     defaultCategory = await prisma.category.create({
-      data: { name: 'ללא קטגוריה', type: 'expense', isMaaserEligible: false },
+      data: { name: 'ללא קטגוריה', type: 'expense', countInMaaserDefault: false },
     });
   }
 
-  const categoryMap = new Map<string, { id: number; isMaaserEligible: boolean }>();
-  existingCategories.forEach((c) => categoryMap.set(c.name, { id: c.id, isMaaserEligible: c.isMaaserEligible }));
-  categoryMap.set(transferCategory.name, { id: transferCategory.id, isMaaserEligible: false });
-  categoryMap.set(defaultCategory.name, { id: defaultCategory.id, isMaaserEligible: false });
+  const categoryMap = new Map<string, { id: number; countInMaaserDefault: boolean }>();
+  existingCategories.forEach((c) =>
+    categoryMap.set(c.name, { id: c.id, countInMaaserDefault: c.countInMaaserDefault })
+  );
+  categoryMap.set(transferCategory.name, { id: transferCategory.id, countInMaaserDefault: false });
+  categoryMap.set(defaultCategory.name, { id: defaultCategory.id, countInMaaserDefault: false });
 
   const preClassifiedItems: any[] = [];
   const unclassifiedForAI: any[] = [];
@@ -258,7 +254,6 @@ export async function commitTransactionsImport(
         description: row.description,
         amount: row.amount,
         categoryId: transferCategory.id,
-        isMaaserEligible: false,
       });
       continue;
     }
@@ -274,7 +269,6 @@ export async function commitTransactionsImport(
         description: row.description,
         amount: row.amount,
         categoryId: matchedRule.categoryId,
-        isMaaserEligible: matchedRule.category.isMaaserEligible,
       });
     } else {
       unclassifiedForAI.push({
@@ -341,7 +335,6 @@ ${dynamicInstructions || 'None'}
       }
     } catch (err) {
       console.error('שגיאה בסיווג AI (מבצע fallback ל"ללא קטגוריה"):', err);
-      // במידה וה-AI נכשל, התנועות ייקלטו כ"ללא קטגוריה" במקום להפיל את כל הקובץ
       aiClassifiedItems = unclassifiedForAI.map((item) => ({
         ...item,
         category: 'ללא קטגוריה',
@@ -355,7 +348,7 @@ ${dynamicInstructions || 'None'}
       const origRow = unclassifiedForAI[idx] || {};
       const catInfo = categoryMap.get(item.category || 'ללא קטגוריה') || {
         id: defaultCategory!.id,
-        isMaaserEligible: false,
+        countInMaaserDefault: false,
       };
       return {
         dateObj: origRow.dateObj || new Date(),
@@ -363,12 +356,11 @@ ${dynamicInstructions || 'None'}
         description: item.description,
         amount: item.amount,
         categoryId: catInfo.id,
-        isMaaserEligible: catInfo.isMaaserEligible,
       };
     }),
   ];
 
-  // הכנת הנתונים לשמירה מרוכזת בשאילתה אחת (Bulk)
+  // כל התנועות החדשות נשמרות עם countInMaaser: null כדי שיירשו דינמית מהקטגוריה שלהן
   const transactionsToCreate = finalSavePayload.map((item) => ({
     date: item.dateObj,
     description: item.description,
@@ -377,15 +369,13 @@ ${dynamicInstructions || 'None'}
     importBatchId: batch.id,
     monthKey: getMonthKey(item.dateObj),
     categoryId: item.categoryId,
-    isMaaserEligible: item.isMaaserEligible,
+    countInMaaser: null,
   }));
 
-  // שמירת כל התנועות בשאילתת INSERT אחת בודדת מול Neon!
   await prisma.transaction.createMany({
     data: transactionsToCreate,
   });
 
-  // שליפת התנועות שנוצרו באצווה זו להחזרה ל-UI
   const savedTransactions = await prisma.transaction.findMany({
     where: { importBatchId: batch.id },
     include: { category: true, account: true },
@@ -404,7 +394,7 @@ ${dynamicInstructions || 'None'}
     accountId: t.accountId || accountId,
     accountName: t.account?.name || 'חשבון כללי',
     category: t.category?.name || 'ללא קטגוריה',
-    isMaaserEligible: t.isMaaserEligible,
+    countInMaaser: t.countInMaaser,
   }));
 }
 
@@ -429,11 +419,12 @@ export async function updateTransactionCategoryAction(transactionId: string, cat
 
   if (!category) throw new Error('הקטגוריה שנבחרה אינה קיימת');
 
+  // שינוי קטגוריה מחזיר את חישוב המעשר לירושה דינמית מהקטגוריה החדשה (null)
   await prisma.transaction.update({
     where: { id: transactionId },
     data: {
       categoryId: category.id,
-      isMaaserEligible: category.isMaaserEligible,
+      countInMaaser: null,
     },
   });
 
@@ -441,10 +432,10 @@ export async function updateTransactionCategoryAction(transactionId: string, cat
   revalidatePath('/budget');
 }
 
-export async function toggleTransactionMaaserAction(transactionId: string, isEligible: boolean) {
+export async function toggleTransactionMaaserAction(transactionId: string, newStatus: boolean | null) {
   await prisma.transaction.update({
     where: { id: transactionId },
-    data: { isMaaserEligible: isEligible },
+    data: { countInMaaser: newStatus },
   });
 
   revalidatePath('/');
@@ -466,7 +457,6 @@ export async function getImportBatches() {
 }
 
 export async function deleteImportBatchAction(batchId: string) {
-  // מחיקת האצווה תמחק אוטומטית את כל ה-Transactions המקושרות הודות ל-onDelete: Cascade ב-Prisma
   await prisma.importBatch.delete({
     where: { id: batchId },
   });

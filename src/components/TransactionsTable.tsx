@@ -7,7 +7,7 @@ import { createRuleAction } from '../app/actions/rules-actions';
 
 interface TableProps {
   transactions: TransactionRow[];
-  categories: CategoryItem[]; // לקבל ישירות מהאבא כדי שה-State יהיה מסונכרן מוחלט
+  categories: CategoryItem[];
   onDeleteRow: (id: string) => void;
   onClearAll: () => void;
   onCategoryChange: (id: string, newCategory: string) => Promise<void>;
@@ -15,7 +15,7 @@ interface TableProps {
 
 export default function TransactionsTable({
   transactions,
-  categories, // שימוש ב-Prop
+  categories,
   onDeleteRow,
   onClearAll,
   onCategoryChange,
@@ -46,20 +46,26 @@ export default function TransactionsTable({
     }
   };
 
-  // מנגנון שינוי מעשר עם אישור "האם אתה בטוח"
-  const handleToggleMaaser = async (item: TransactionRow) => {
+  // מעבר מחזורי: לפי קטגוריה (null) -> שינוי ידני להפך -> החזרה לקטגוריה
+  const handleToggleMaaser = async (item: TransactionRow, currentEffective: boolean, isOverridden: boolean) => {
     if (!item.id) return;
 
-    const actionText = item.isMaaserEligible ? 'להסיר מחישוב' : 'להוסיף לחישוב';
-    const isConfirmed = confirm(
-      `האם אתה בטוח שברצונך ${actionText} המעשר את התנועה:\n"${item.description}" על סך ₪${Number(item.amount).toFixed(2)}?`
-    );
+    let newStatus: boolean | null;
+    let confirmMsg: string;
 
-    if (!isConfirmed) return;
+    if (!isOverridden) {
+      newStatus = !currentEffective;
+      const actionText = newStatus ? 'להוסיף לחישוב' : 'להסיר מחישוב';
+      confirmMsg = `האם לקבוע עריכה ידנית: ${actionText} המעשר עבור:\n"${item.description}"?`;
+    } else {
+      newStatus = null; // איפוס בחזרה לירושה מהקטגוריה
+      confirmMsg = `האם לאפס את התנועה "${item.description}" בחזרה לברירת המחדל של הקטגוריה?`;
+    }
 
-    const newStatus = !item.isMaaserEligible;
+    if (!confirm(confirmMsg)) return;
+
     await toggleTransactionMaaserAction(item.id, newStatus);
-    item.isMaaserEligible = newStatus;
+    item.countInMaaser = newStatus;
   };
 
   const handleConfirmRule = async () => {
@@ -119,25 +125,32 @@ export default function TransactionsTable({
               const matchedCat = categories.find((c) => c.name === item.category);
               const showMaaserToggle = matchedCat?.type === 'income' || matchedCat?.type === 'donations';
 
+              // זיהוי האם התנועה נערכה ידנית
+              const isOverridden = item.countInMaaser !== null && item.countInMaaser !== undefined;
+              const isCounted = isOverridden ? item.countInMaaser : (matchedCat?.countInMaaserDefault ?? false);
+
               return (
                 <tr
                   key={item.id}
-                  className={`border-b transition ${isUncategorized ? 'bg-amber-50/40 hover:bg-amber-100/50' : 'bg-white hover:bg-gray-50'
-                    }`}
+                  className={`border-b transition ${
+                    isUncategorized ? 'bg-amber-50/40 hover:bg-amber-100/50' : 'bg-white hover:bg-gray-50'
+                  }`}
                 >
                   <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">{item.date}</td>
                   <td className="px-6 py-4">{item.description}</td>
                   <td className="px-6 py-4 font-semibold text-gray-800 dir-ltr text-right">
                     ₪{Number(item.amount).toFixed(2)}
                   </td>
-                  <td className="px-6 py-4">{item.accountName || 'חשבון כללי'}</td>                  <td className="px-6 py-4">
+                  <td className="px-6 py-4">{item.accountName || 'חשבון כללי'}</td>
+                  <td className="px-6 py-4">
                     <select
                       value={item.category || 'ללא קטגוריה'}
                       onChange={(e) => handleSelectChange(item, e.target.value)}
-                      className={`border rounded-lg p-1.5 text-xs font-semibold focus:outline-none focus:ring-2 transition cursor-pointer ${isUncategorized
+                      className={`border rounded-lg p-1.5 text-xs font-semibold focus:outline-none focus:ring-2 transition cursor-pointer ${
+                        isUncategorized
                           ? 'bg-amber-100 text-amber-800 border-amber-300 focus:ring-amber-400'
                           : 'bg-emerald-50 text-emerald-800 border-emerald-300 focus:ring-emerald-400'
-                        }`}
+                      }`}
                     >
                       {categories.map((c) => (
                         <option key={c.id} value={c.name} className="bg-white text-gray-800 font-normal">
@@ -149,14 +162,20 @@ export default function TransactionsTable({
                   <td className="px-6 py-4 text-center">
                     {showMaaserToggle ? (
                       <button
-                        onClick={() => handleToggleMaaser(item)}
-                        className={`text-xs font-bold px-2.5 py-1 rounded transition border ${item.isMaaserEligible
+                        onClick={() => handleToggleMaaser(item, !!isCounted, isOverridden)}
+                        className={`text-xs font-bold px-2.5 py-1 rounded transition border inline-flex items-center gap-1 ${
+                          isCounted
                             ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
                             : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'
-                          }`}
-                        title="לחץ כדי לשנות האם תנועה זו מחושבת למעשר"
+                        }`}
+                        title={
+                          isOverridden
+                            ? 'נערך ידנית! לחץ שוב כדי לאפס לברירת המחדל של הקטגוריה'
+                            : 'מחושב לפי הקטגוריה. לחץ כדי לערוך ידנית'
+                        }
                       >
-                        {item.isMaaserEligible ? '🪙 מחושב' : 'לא מחושב'}
+                        {isOverridden && <span className="text-[10px]">✍️</span>}
+                        <span>{isCounted ? '🪙 מחושב' : 'לא מחושב'}</span>
                       </button>
                     ) : (
                       <span className="text-xs text-gray-300">-</span>
