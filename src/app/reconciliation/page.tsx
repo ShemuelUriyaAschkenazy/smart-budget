@@ -310,7 +310,9 @@ export default function ReconciliationPage() {
 
                     <div className="text-left flex items-center gap-3">
                       <span dir="ltr" className="font-black text-gray-900">
-                        ₪{item.amount.toFixed(2)}
+                        {item.amount < 0
+                          ? `-₪${Math.abs(item.amount).toFixed(2)}`
+                          : `₪${item.amount.toFixed(2)}`}
                       </span>
                       {item.isMatched ? (
                         <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
