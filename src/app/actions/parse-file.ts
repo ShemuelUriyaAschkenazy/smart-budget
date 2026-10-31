@@ -1,13 +1,14 @@
-'use server';
+"use server";
 
-import { GoogleGenAI, Type } from '@google/genai';
-import ExcelJS from 'exceljs';
-import { prisma } from '../../lib/prisma';
-import { revalidatePath } from 'next/cache';
-import { parsePoalimFile } from '../../lib/parsers/poalim-parser';
-import { parseMaxFile } from '../../lib/parsers/max-parser';
-import { parseCalFile } from '../../lib/parsers/cal-parser';
-import { parseIsracardFile } from '../../lib/parsers/isracard-parser';
+import { GoogleGenAI, Type } from "@google/genai";
+import ExcelJS from "exceljs";
+import { prisma } from "../../lib/prisma";
+import { revalidatePath } from "next/cache";
+import { parsePoalimFile } from "../../lib/parsers/poalim-parser";
+import { parseMaxFile } from "../../lib/parsers/max-parser";
+import { parseCalFile } from "../../lib/parsers/cal-parser";
+import { parseIsracardFile } from "../../lib/parsers/isracard-parser";
+import { SYSTEM_CATEGORIES } from "../../lib/constants";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -33,26 +34,29 @@ export interface FileAnalysisResult {
 }
 
 function formatDateForUI(dateObj: Date): string {
-  const d = dateObj.getDate().toString().padStart(2, '0');
-  const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+  const d = dateObj.getDate().toString().padStart(2, "0");
+  const m = (dateObj.getMonth() + 1).toString().padStart(2, "0");
   const y = dateObj.getFullYear();
   return `${d}/${m}/${y}`;
 }
 
 function getMonthKey(dateObj: Date): string {
   const year = dateObj.getFullYear();
-  const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+  const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
   return `${year}-${month}`;
 }
 
-export async function getTransactions(monthKey?: string, accountId?: string): Promise<TransactionRow[]> {
+export async function getTransactions(
+  monthKey?: string,
+  accountId?: string,
+): Promise<TransactionRow[]> {
   const whereCondition: any = {};
   if (monthKey) whereCondition.monthKey = monthKey;
-  if (accountId && accountId !== 'ALL') whereCondition.accountId = accountId;
+  if (accountId && accountId !== "ALL") whereCondition.accountId = accountId;
 
   const data = await prisma.transaction.findMany({
     where: whereCondition,
-    orderBy: { date: 'desc' },
+    orderBy: { date: "desc" },
     include: { category: true, account: true },
   });
 
@@ -63,8 +67,8 @@ export async function getTransactions(monthKey?: string, accountId?: string): Pr
     description: t.description,
     amount: Number(t.amount),
     accountId: t.accountId || undefined,
-    accountName: t.account?.name || 'חשבון כללי',
-    category: t.category?.name || 'ללא קטגוריה',
+    accountName: t.account?.name || "חשבון כללי",
+    category: t.category?.name || "ללא קטגוריה",
     countInMaaser: t.countInMaaser,
   }));
 }
@@ -73,39 +77,41 @@ function isCreditCardChargeDescription(description: string): boolean {
   if (!description) return false;
 
   const cleanDesc = description
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
     .toLowerCase()
     .trim();
 
   const keywords = [
-    'כרטיסי אשראי',
-    'כרטיס אשראי',
-    'ישראכרט',
-    'מקס',
-    'max',
-    'כאל',
-    'cal',
-    'ויזה',
-    'מסטרקארד',
-    'מאסטרקארד',
-    'דיינרס',
-    'אמריקן אקספרס',
-    'אמקס',
+    "כרטיסי אשראי",
+    "כרטיס אשראי",
+    "ישראכרט",
+    "מקס",
+    "max",
+    "כאל",
+    "cal",
+    "ויזה",
+    "מסטרקארד",
+    "מאסטרקארד",
+    "דיינרס",
+    "אמריקן אקספרס",
+    "אמקס",
   ];
 
   return keywords.some((kw) => cleanDesc.includes(kw));
 }
 
-export async function analyzeUploadedFile(formData: FormData): Promise<FileAnalysisResult> {
-  const file = formData.get('file') as File;
-  const provider = (formData.get('provider') as string) || 'max';
-  const accountId = (formData.get('accountId') as string) || 'ALL';
+export async function analyzeUploadedFile(
+  formData: FormData,
+): Promise<FileAnalysisResult> {
+  const file = formData.get("file") as File;
+  const provider = (formData.get("provider") as string) || "max";
+  const accountId = (formData.get("accountId") as string) || "ALL";
 
-  if (!file) throw new Error('לא נבחר קובץ');
+  if (!file) throw new Error("לא נבחר קובץ");
 
-  let sourceName = 'קובץ מרוכז (כל הכרטיסים)';
-  if (accountId !== 'ALL') {
+  let sourceName = "קובץ מרוכז (כל הכרטיסים)";
+  if (accountId !== "ALL") {
     const account = await prisma.financialAccount.findUnique({
       where: { id: accountId },
     });
@@ -115,9 +121,14 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer) as any;
 
-  let parsedRows: { dateObj: Date; description: string; amount: number; accountId: string }[] = [];
+  let parsedRows: {
+    dateObj: Date;
+    description: string;
+    amount: number;
+    accountId: string;
+  }[] = [];
 
-  if (provider === 'isracard') {
+  if (provider === "isracard") {
     const isracardRows = await parseIsracardFile(buffer);
     parsedRows = isracardRows.map((r) => ({ ...r, accountId }));
   } else {
@@ -125,17 +136,17 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
     await workbook.xlsx.load(buffer);
 
     switch (provider) {
-      case 'max': {
+      case "max": {
         const maxRows = await parseMaxFile(workbook, accountId);
         parsedRows = maxRows;
         break;
       }
-      case 'cal': {
+      case "cal": {
         const calRows = await parseCalFile(workbook);
         parsedRows = calRows.map((r) => ({ ...r, accountId }));
         break;
       }
-      case 'poalim':
+      case "poalim":
       default: {
         const poalimRows = await parsePoalimFile(workbook);
         parsedRows = poalimRows.map((r) => ({ ...r, accountId }));
@@ -163,11 +174,14 @@ export async function analyzeUploadedFile(formData: FormData): Promise<FileAnaly
     });
 
     const existingSet = new Set(
-      existingTx.map((t) => `${t.date.toISOString().split('T')[0]}_${t.description.trim()}_${Number(t.amount)}`)
+      existingTx.map(
+        (t) =>
+          `${t.date.toISOString().split("T")[0]}_${t.description.trim()}_${Number(t.amount)}`,
+      ),
     );
 
     parsedRows.forEach((r) => {
-      const key = `${r.dateObj.toISOString().split('T')[0]}_${r.description.trim()}_${r.amount}`;
+      const key = `${r.dateObj.toISOString().split("T")[0]}_${r.description.trim()}_${r.amount}`;
       const rowData: TransactionRow = {
         date: formatDateForUI(r.dateObj),
         rawDate: r.dateObj.toISOString(),
@@ -199,46 +213,73 @@ export async function commitTransactionsImport(
   itemsToSave: TransactionRow[],
   accountId: string,
   fileName?: string,
-  provider?: string
+  provider?: string,
 ): Promise<TransactionRow[]> {
   if (!itemsToSave || itemsToSave.length === 0) return [];
 
   const batch = await prisma.importBatch.create({
     data: {
-      fileName: fileName || 'קובץ נטען',
-      provider: provider || 'general',
-      accountId: accountId !== 'ALL' ? accountId : null,
+      fileName: fileName || "קובץ נטען",
+      provider: provider || "general",
+      accountId: accountId !== "ALL" ? accountId : null,
     },
   });
 
   const existingCategories = await prisma.category.findMany();
-  const regularRules = await prisma.rule.findMany({ include: { category: true } });
+  const regularRules = await prisma.rule.findMany({
+    include: { category: true },
+  });
 
-  let transferCategory = existingCategories.find((c) => c.name === 'כיסוי חיוב אשראי (מנוטרל)');
+  let transferCategory = existingCategories.find(
+    (c) =>
+      c.name === SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.NAME || c.isNeutralized,
+  );
+
   if (!transferCategory) {
     transferCategory = await prisma.category.create({
       data: {
-        name: 'כיסוי חיוב אשראי (מנוטרל)',
-        type: 'transfer',
-        countInMaaserDefault: false,
-        isNeutralized: true,
+        name: SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.NAME,
+        type: SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.TYPE,
+        countInMaaserDefault:
+          SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.COUNT_IN_MAASER_DEFAULT,
+        isNeutralized: SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.IS_NEUTRALIZED,
       },
     });
   }
 
-  let defaultCategory = existingCategories.find((c) => c.name === 'ללא קטגוריה');
+  let defaultCategory = existingCategories.find(
+    (c) => c.name === SYSTEM_CATEGORIES.DEFAULT_UNCATEGORIZED.NAME,
+  );
+
   if (!defaultCategory) {
     defaultCategory = await prisma.category.create({
-      data: { name: 'ללא קטגוריה', type: 'expense', countInMaaserDefault: false },
+      data: {
+        name: SYSTEM_CATEGORIES.DEFAULT_UNCATEGORIZED.NAME,
+        type: SYSTEM_CATEGORIES.DEFAULT_UNCATEGORIZED.TYPE,
+        countInMaaserDefault:
+          SYSTEM_CATEGORIES.DEFAULT_UNCATEGORIZED.COUNT_IN_MAASER_DEFAULT,
+      },
     });
   }
 
-  const categoryMap = new Map<string, { id: number; countInMaaserDefault: boolean }>();
+  const categoryMap = new Map<
+    string,
+    { id: number; countInMaaserDefault: boolean }
+  >();
   existingCategories.forEach((c) =>
-    categoryMap.set(c.name, { id: c.id, countInMaaserDefault: c.countInMaaserDefault })
+    categoryMap.set(c.name, {
+      id: c.id,
+      countInMaaserDefault: c.countInMaaserDefault,
+    }),
   );
-  categoryMap.set(transferCategory.name, { id: transferCategory.id, countInMaaserDefault: false });
-  categoryMap.set(defaultCategory.name, { id: defaultCategory.id, countInMaaserDefault: false });
+  categoryMap.set(transferCategory.name, {
+    id: transferCategory.id,
+    countInMaaserDefault: false,
+  });
+  categoryMap.set(defaultCategory.name, {
+    id: defaultCategory.id,
+    countInMaaserDefault: false,
+  });
 
   const preClassifiedItems: any[] = [];
   const unclassifiedForAI: any[] = [];
@@ -259,7 +300,7 @@ export async function commitTransactionsImport(
     }
 
     const matchedRule = regularRules.find((rule) =>
-      row.description.toLowerCase().includes(rule.keyword.toLowerCase())
+      row.description.toLowerCase().includes(rule.keyword.toLowerCase()),
     );
 
     if (matchedRule) {
@@ -281,39 +322,39 @@ export async function commitTransactionsImport(
   }
 
   let aiClassifiedItems: any[] = [];
-
   if (unclassifiedForAI.length > 0) {
     try {
       const allowedCategories = Array.from(categoryMap.keys());
       const activeAIRules = await prisma.aIRule.findMany({
-        where: { OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }] },
+        where: {
+          OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
+        },
       });
 
       const dynamicInstructions = activeAIRules
-        .filter((r) => r.ruleType === 'prompt_instruction' && r.instructionText)
+        .filter((r) => r.ruleType === "prompt_instruction" && r.instructionText)
         .map((r) => `- ${r.instructionText}`)
-        .join('\n');
+        .join("\n");
 
       const systemInstruction = `
 You are a personal finance assistant categorizing Israeli financial transactions.
-
-Allowed Categories (STRICT LIST):
-[${allowedCategories.join(', ')}]
+Allowed Categories (STRICT LIST): [${allowedCategories.join(", ")}]
 
 Rules:
-1. Credit card bill coverages (e.g., "ישראכרט", "מקס", "כאל", "כרטיסי אשראי", "ויזה") MUST be categorized EXACTLY as: "כיסוי חיוב אשראי (מנוטרל)".
-2. Custom User Rules:
-${dynamicInstructions || 'None'}
-
-3. If a transaction description is ambiguous, unclear, or doesn't match any category, select EXACTLY: "ללא קטגוריה".
-4. NEVER invent new categories. Output MUST match one of the allowed categories verbatim.
+1. Credit card bill coverages (e.g., "כרטיסי אשראי לישראל", "ישראכרט", "מקס איט פיננסים", "חיוב כרטיס אשראי") MUST be categorized EXACTLY as: "${SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.NAME}"
+2. Refunds and reimbursements (e.g., "זיכוי זארה", store returns, positive credit card amounts) MUST be categorized to their relevant expense category (e.g. Clothing, Groceries) to offset expenses, and NOT to income categories.
+3. Custom User Rules:
+${dynamicInstructions || "None"}
+4. If a transaction description is ambiguous, unclear, or doesn't match any category, select EXACTLY: "${SYSTEM_CATEGORIES.DEFAULT_UNCATEGORIZED.NAME}"
+5. NEVER invent new categories. Output MUST match one of the allowed categories verbatim.
 `;
+
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: `סווג את התנועות הבאות: ${JSON.stringify(unclassifiedForAI)}`,
+        model: "gemini-3.6-flash",
+        contents: `קטלג את התנועות הבאות: ${JSON.stringify(unclassifiedForAI)}`,
         config: {
           systemInstruction,
-          responseMimeType: 'application/json',
+          responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
             items: {
@@ -324,7 +365,7 @@ ${dynamicInstructions || 'None'}
                 amount: { type: Type.NUMBER },
                 category: { type: Type.STRING },
               },
-              required: ['date', 'description', 'amount', 'category'],
+              required: ["date", "description", "amount", "category"],
             },
           },
         },
@@ -334,10 +375,10 @@ ${dynamicInstructions || 'None'}
         aiClassifiedItems = JSON.parse(response.text);
       }
     } catch (err) {
-      console.error('שגיאה בסיווג AI (מבצע fallback ל"ללא קטגוריה"):', err);
+      console.error("שגיאה בסיווג AI (נופל לקטגוריית ברירת מחדל):", err);
       aiClassifiedItems = unclassifiedForAI.map((item) => ({
         ...item,
-        category: 'ללא קטגוריה',
+        category: SYSTEM_CATEGORIES.DEFAULT_UNCATEGORIZED.NAME,
       }));
     }
   }
@@ -346,7 +387,7 @@ ${dynamicInstructions || 'None'}
     ...preClassifiedItems,
     ...aiClassifiedItems.map((item, idx) => {
       const origRow = unclassifiedForAI[idx] || {};
-      const catInfo = categoryMap.get(item.category || 'ללא קטגוריה') || {
+      const catInfo = categoryMap.get(item.category || "ללא קטגוריה") || {
         id: defaultCategory!.id,
         countInMaaserDefault: false,
       };
@@ -365,7 +406,7 @@ ${dynamicInstructions || 'None'}
     date: item.dateObj,
     description: item.description,
     amount: item.amount,
-    accountId: accountId !== 'ALL' ? accountId : null,
+    accountId: accountId !== "ALL" ? accountId : null,
     importBatchId: batch.id,
     monthKey: getMonthKey(item.dateObj),
     categoryId: item.categoryId,
@@ -379,11 +420,11 @@ ${dynamicInstructions || 'None'}
   const savedTransactions = await prisma.transaction.findMany({
     where: { importBatchId: batch.id },
     include: { category: true, account: true },
-    orderBy: { date: 'desc' },
+    orderBy: { date: "desc" },
   });
 
-  revalidatePath('/');
-  revalidatePath('/budget');
+  revalidatePath("/");
+  revalidatePath("/budget");
 
   return savedTransactions.map((t) => ({
     id: t.id,
@@ -392,8 +433,8 @@ ${dynamicInstructions || 'None'}
     description: t.description,
     amount: Number(t.amount),
     accountId: t.accountId || accountId,
-    accountName: t.account?.name || 'חשבון כללי',
-    category: t.category?.name || 'ללא קטגוריה',
+    accountName: t.account?.name || "חשבון כללי",
+    category: t.category?.name || "ללא קטגוריה",
     countInMaaser: t.countInMaaser,
   }));
 }
@@ -402,22 +443,25 @@ export async function deleteTransactionAction(id: string) {
   await prisma.transaction.delete({
     where: { id },
   });
-  revalidatePath('/uploads');
-  revalidatePath('/');
-  revalidatePath('/budget');
+  revalidatePath("/uploads");
+  revalidatePath("/");
+  revalidatePath("/budget");
 }
 
 export async function clearAllTransactionsAction() {
   await prisma.transaction.deleteMany();
-  revalidatePath('/');
+  revalidatePath("/");
 }
 
-export async function updateTransactionCategoryAction(transactionId: string, categoryName: string) {
+export async function updateTransactionCategoryAction(
+  transactionId: string,
+  categoryName: string,
+) {
   const category = await prisma.category.findUnique({
     where: { name: categoryName },
   });
 
-  if (!category) throw new Error('הקטגוריה שנבחרה אינה קיימת');
+  if (!category) throw new Error("הקטגוריה שנבחרה אינה קיימת");
 
   // שינוי קטגוריה מחזיר את חישוב המעשר לירושה דינמית מהקטגוריה החדשה (null)
   await prisma.transaction.update({
@@ -428,27 +472,30 @@ export async function updateTransactionCategoryAction(transactionId: string, cat
     },
   });
 
-  revalidatePath('/');
-  revalidatePath('/budget');
+  revalidatePath("/");
+  revalidatePath("/budget");
 }
 
-export async function toggleTransactionMaaserAction(transactionId: string, newStatus: boolean | null) {
+export async function toggleTransactionMaaserAction(
+  transactionId: string,
+  newStatus: boolean | null,
+) {
   await prisma.transaction.update({
     where: { id: transactionId },
     data: { countInMaaser: newStatus },
   });
 
-  revalidatePath('/');
-  revalidatePath('/budget');
+  revalidatePath("/");
+  revalidatePath("/budget");
 }
 
 export async function getImportBatches() {
   return await prisma.importBatch.findMany({
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
     include: {
       account: { select: { name: true } },
       transactions: {
-        orderBy: { date: 'desc' },
+        orderBy: { date: "desc" },
         include: { category: true },
       },
       _count: { select: { transactions: true } },
@@ -460,6 +507,6 @@ export async function deleteImportBatchAction(batchId: string) {
   await prisma.importBatch.delete({
     where: { id: batchId },
   });
-  revalidatePath('/');
-  revalidatePath('/budget');
+  revalidatePath("/");
+  revalidatePath("/budget");
 }

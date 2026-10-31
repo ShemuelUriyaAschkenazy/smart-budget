@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import ExcelJS from "exceljs";
 
 export interface ParsedTransaction {
   dateObj: Date;
@@ -6,7 +6,9 @@ export interface ParsedTransaction {
   amount: number;
 }
 
-export async function parseCalFile(workbook: ExcelJS.Workbook): Promise<ParsedTransaction[]> {
+export async function parseCalFile(
+  workbook: ExcelJS.Workbook,
+): Promise<ParsedTransaction[]> {
   const worksheet = workbook.worksheets[0];
   const parsedRows: ParsedTransaction[] = [];
 
@@ -21,12 +23,14 @@ export async function parseCalFile(workbook: ExcelJS.Workbook): Promise<ParsedTr
     if (headerRowIdx !== -1) return;
 
     const rowValues = Array.isArray(row.values) ? row.values : [];
-    const values = rowValues.map((v) => (v != null ? String(v).trim() : ''));
+    const values = rowValues.map((v) => (v != null ? String(v).trim() : ""));
 
-    const dateIdx = values.findIndex((v) => v && v.includes('תאריך עסקה'));
-    const descIdx = values.findIndex((v) => v && (v.includes('שם בית עסק') || v.includes('שם בית העסק')));
-    const chargeIdx = values.findIndex((v) => v && v.includes('סכום חיוב'));
-    const origIdx = values.findIndex((v) => v && v.includes('סכום עסקה'));
+    const dateIdx = values.findIndex((v) => v && v.includes("תאריך עסקה"));
+    const descIdx = values.findIndex(
+      (v) => v && (v.includes("שם בית עסק") || v.includes("שם בית העסק")),
+    );
+    const chargeIdx = values.findIndex((v) => v && v.includes("סכום חיוב"));
+    const origIdx = values.findIndex((v) => v && v.includes("סכום עסקה"));
 
     if (dateIdx !== -1 && descIdx !== -1) {
       headerRowIdx = rowNumber;
@@ -48,19 +52,27 @@ export async function parseCalFile(workbook: ExcelJS.Workbook): Promise<ParsedTr
       if (!rawDate) return;
 
       const dateObj = parseExcelDate(rawDate);
-      const description = values[descColIdx] ? String(values[descColIdx]).trim() : '';
+      const description = values[descColIdx]
+        ? String(values[descColIdx]).trim()
+        : "";
 
       // עדיפות לסכום חיוב בפועל, ואם ריק (למשל בעסקה בקליטה) - סכום עסקה
-      let chargeAmtStr = values[chargeAmtColIdx] != null ? String(values[chargeAmtColIdx]) : '';
-      if (!chargeAmtStr && originalAmtColIdx !== -1 && values[originalAmtColIdx] != null) {
+      let chargeAmtStr =
+        values[chargeAmtColIdx] != null ? String(values[chargeAmtColIdx]) : "";
+      if (
+        !chargeAmtStr &&
+        originalAmtColIdx !== -1 &&
+        values[originalAmtColIdx] != null
+      ) {
         chargeAmtStr = String(values[originalAmtColIdx]);
       }
 
-      // ניקוי סימני ₪, פסיקים ורווחים
-      const cleanAmt = Number(chargeAmtStr.replace(/[₪,\s]/g, ''));
-
-      if (description && !isNaN(cleanAmt) && cleanAmt > 0) {
-        parsedRows.push({ dateObj, description, amount: -cleanAmt });
+      const cleanAmt = Number(chargeAmtStr.replace(/[ ,\s]/g, ""));
+      if (description && !isNaN(cleanAmt) && cleanAmt !== 0) {
+        // אם הסכום בקובץ כבר מופיע כשלילי (או מכיל סימן זיכוי), נשמור כחיובי; אחרת כשלילי
+        const isRefund = cleanAmt < 0 || description.includes("זיכוי");
+        const finalAmount = isRefund ? Math.abs(cleanAmt) : -Math.abs(cleanAmt);
+        parsedRows.push({ dateObj, description, amount: finalAmount });
       }
     });
   }
@@ -72,12 +84,12 @@ export async function parseCalFile(workbook: ExcelJS.Workbook): Promise<ParsedTr
 function parseExcelDate(val: any): Date {
   if (val instanceof Date && !isNaN(val.getTime())) return val;
 
-  if (typeof val === 'number') {
+  if (typeof val === "number") {
     // המרת מספר סידורי של Excel לתאריך JavaScript
     return new Date(Math.round((val - 25569) * 86400 * 1000));
   }
 
-  if (typeof val === 'string') {
+  if (typeof val === "string") {
     const trimmed = val.trim();
     const num = Number(trimmed);
     if (!isNaN(num) && num > 30000) {
@@ -86,7 +98,11 @@ function parseExcelDate(val: any): Date {
 
     const parts = trimmed.split(/[\/.-]/);
     if (parts.length === 3 && parts[0].length <= 2 && parts[2].length === 4) {
-      return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      return new Date(
+        parseInt(parts[2], 10),
+        parseInt(parts[1], 10) - 1,
+        parseInt(parts[0], 10),
+      );
     }
     const d = new Date(val);
     if (!isNaN(d.getTime())) return d;

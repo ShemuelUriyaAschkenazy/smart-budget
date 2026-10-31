@@ -1,7 +1,8 @@
-'use server';
+"use server";
 
-import { prisma } from '../../lib/prisma';
-import { revalidatePath } from 'next/cache';
+import { prisma } from "../../lib/prisma";
+import { revalidatePath } from "next/cache";
+import { SYSTEM_CATEGORIES } from "../../lib/constants";
 
 export interface BudgetVsActualItem {
   categoryId: number;
@@ -43,17 +44,21 @@ export interface MonthlyOverview {
   maaser: MaaserSummary;
 }
 
-export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOverview> {
+export async function getBudgetVsActual(
+  monthKey: string,
+): Promise<MonthlyOverview> {
   try {
     const categories = await prisma.category.findMany({
       include: {
         budgets: { where: { monthKey } },
         transactions: { where: { monthKey } },
       },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
 
-    let maaserSettings = await prisma.maaserSettings.findUnique({ where: { id: 1 } });
+    let maaserSettings = await prisma.maaserSettings.findUnique({
+      where: { id: 1 },
+    });
     if (!maaserSettings) {
       maaserSettings = await prisma.maaserSettings.create({
         data: { id: 1, initialBalance: 0, percentage: 10 },
@@ -80,25 +85,32 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
     const donationItems: BudgetVsActualItem[] = [];
 
     categories.forEach((cat) => {
-      if (cat.isNeutralized || cat.name === 'כיסוי חיוב אשראי (מנוטרל)') {
+      if (
+        cat.isNeutralized ||
+        cat.name === SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.NAME
+      ) {
         return;
       }
 
-      const budgetAmount = cat.budgets && cat.budgets[0] ? Number(cat.budgets[0].amount) : 0;
+      const budgetAmount =
+        cat.budgets && cat.budgets[0] ? Number(cat.budgets[0].amount) : 0;
       let actualAmount = 0;
 
+      // החלפת לולאת ה-transactions בתוך categories.forEach
       if (cat.transactions) {
         cat.transactions.forEach((t) => {
-          const amt = Math.abs(Number(t.amount));
-          actualAmount += amt;
+          const rawAmt = Number(t.amount);
 
-          // חישוב זכאות למעשר: דריסה ידנית קודמת, ואם null יורש מברירת המחדל של הקטגוריה
+          // בהכנסות: סכום חיובי מגדיל, החזר/קיזוז שלילי מקטין
+          // בהוצאות/תרומות/חסכונות: סכום שלילי מגדיל את ההוצאה, זיכוי חיובי מקזז אותה
+          const effectiveAmt = cat.type === "income" ? rawAmt : -rawAmt;
+          actualAmount += effectiveAmt;
+
           const shouldCount = t.countInMaaser ?? cat.countInMaaserDefault;
-
-          if (cat.type === 'income' && shouldCount) {
-            monthMaaserEligibleIncome += amt;
-          } else if (cat.type === 'donations' && shouldCount) {
-            monthMaaserEligibleDonations += amt;
+          if (cat.type === "income" && shouldCount) {
+            monthMaaserEligibleIncome += rawAmt;
+          } else if (cat.type === "donations" && shouldCount) {
+            monthMaaserEligibleDonations += effectiveAmt;
           }
         });
       }
@@ -109,19 +121,25 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
         categoryType: cat.type,
         budgetAmount,
         actualAmount,
-        difference: cat.type === 'income' ? actualAmount - budgetAmount : budgetAmount - actualAmount,
-        percentUsed: budgetAmount > 0 ? Math.round((actualAmount / budgetAmount) * 100) : 0,
+        difference:
+          cat.type === "income"
+            ? actualAmount - budgetAmount
+            : budgetAmount - actualAmount,
+        percentUsed:
+          budgetAmount > 0
+            ? Math.round((actualAmount / budgetAmount) * 100)
+            : 0,
       };
 
-      if (cat.type === 'income') {
+      if (cat.type === "income") {
         totalPlannedIncome += budgetAmount;
         totalActualIncome += actualAmount;
         incomeItems.push(item);
-      } else if (cat.type === 'savings') {
+      } else if (cat.type === "savings") {
         totalPlannedSavings += budgetAmount;
         totalActualSavings += actualAmount;
         savingsItems.push(item);
-      } else if (cat.type === 'donations') {
+      } else if (cat.type === "donations") {
         totalPlannedDonations += budgetAmount;
         totalActualDonations += actualAmount;
         donationItems.push(item);
@@ -135,7 +153,8 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
     const initialBal = Number(maaserSettings.initialBalance);
     const pct = Number(maaserSettings.percentage);
     const monthMaaserObligation = (monthMaaserEligibleIncome * pct) / 100;
-    const currentCumulativeBalance = initialBal + monthMaaserObligation - monthMaaserEligibleDonations;
+    const currentCumulativeBalance =
+      initialBal + monthMaaserObligation - monthMaaserEligibleDonations;
 
     return {
       monthKey,
@@ -147,8 +166,12 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
       totalActualSavings,
       totalPlannedDonations,
       totalActualDonations,
-      netPlannedFree: totalPlannedIncome - (totalPlannedExpenses + totalPlannedSavings + totalPlannedDonations),
-      netActualFree: totalActualIncome - (totalActualExpenses + totalActualSavings + totalActualDonations),
+      netPlannedFree:
+        totalPlannedIncome -
+        (totalPlannedExpenses + totalPlannedSavings + totalPlannedDonations),
+      netActualFree:
+        totalActualIncome -
+        (totalActualExpenses + totalActualSavings + totalActualDonations),
       incomeItems,
       expenseItems,
       savingsItems,
@@ -165,25 +188,32 @@ export async function getBudgetVsActual(monthKey: string): Promise<MonthlyOvervi
       },
     };
   } catch (error) {
-    console.error('Error fetching budget data:', error);
+    console.error("Error fetching budget data:", error);
     throw error;
   }
 }
 
-export async function setCategoryBudgetAction(monthKey: string, categoryId: number, amount: number) {
+export async function setCategoryBudgetAction(
+  monthKey: string,
+  categoryId: number,
+  amount: number,
+) {
   await prisma.budget.upsert({
     where: { monthKey_categoryId: { monthKey, categoryId } },
     update: { amount },
     create: { monthKey, categoryId, amount },
   });
-  revalidatePath('/budget');
+  revalidatePath("/budget");
 }
 
-export async function updateMaaserSettingsAction(initialBalance: number, percentage: number) {
+export async function updateMaaserSettingsAction(
+  initialBalance: number,
+  percentage: number,
+) {
   await prisma.maaserSettings.upsert({
     where: { id: 1 },
     update: { initialBalance, percentage },
     create: { id: 1, initialBalance, percentage },
   });
-  revalidatePath('/budget');
+  revalidatePath("/budget");
 }

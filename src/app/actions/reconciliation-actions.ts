@@ -1,7 +1,8 @@
-'use server';
+"use server";
 
-import { prisma } from '../../lib/prisma';
-import { revalidatePath } from 'next/cache';
+import { SYSTEM_CATEGORIES } from "@/src/lib/constants";
+import { prisma } from "../../lib/prisma";
+import { revalidatePath } from "next/cache";
 
 export interface ReconciliationItem {
   id: string;
@@ -29,14 +30,14 @@ export interface ReconciliationOverview {
 }
 
 function formatDateForUI(dateObj: Date): string {
-  const d = dateObj.getDate().toString().padStart(2, '0');
-  const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+  const d = dateObj.getDate().toString().padStart(2, "0");
+  const m = (dateObj.getMonth() + 1).toString().padStart(2, "0");
   const y = dateObj.getFullYear();
   return `${d}/${m}/${y}`;
 }
 
 function getPreviousMonthKey(monthKey: string): string {
-  const [yearStr, monthStr] = monthKey.split('-');
+  const [yearStr, monthStr] = monthKey.split("-");
   let year = parseInt(yearStr, 10);
   let month = parseInt(monthStr, 10) - 1;
 
@@ -45,10 +46,12 @@ function getPreviousMonthKey(monthKey: string): string {
     year -= 1;
   }
 
-  return `${year}-${month.toString().padStart(2, '0')}`;
+  return `${year}-${month.toString().padStart(2, "0")}`;
 }
 
-export async function getReconciliationData(monthKey: string): Promise<ReconciliationOverview> {
+export async function getReconciliationData(
+  monthKey: string,
+): Promise<ReconciliationOverview> {
   const previousMonthKey = getPreviousMonthKey(monthKey);
 
   const transactions = await prisma.transaction.findMany({
@@ -58,7 +61,7 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
       },
     },
     include: { category: true, account: true }, // <--- הוסף את account: true
-    orderBy: { date: 'desc' },
+    orderBy: { date: "desc" },
   });
 
   const matches = await prisma.creditMatch.findMany({
@@ -84,42 +87,42 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
 
   transactions.forEach((t) => {
     const isCreditCardSummaryCharge =
-      t.category?.isNeutralized || t.category?.name === 'כיסוי חיוב אשראי (מנוטרל)';
-    const amt = Math.abs(Number(t.amount));
-
-    const sourceName = t.account?.name || t.account?.provider || 'ללא חשבון מקושר';
-    const isBankAccount = t.account?.type === 'bank';
+      t.category?.isNeutralized ||
+      t.category?.name === SYSTEM_CATEGORIES.CREDIT_CARD_TRANSFER.NAME;
+    const rawAmt = Number(t.amount);
+    const sourceName = t.account?.name || t.account?.provider || "ללא חשבון";
+    const isBankAccount = t.account?.type === "bank";
 
     if (isCreditCardSummaryCharge && t.monthKey === monthKey) {
+      const amt = Math.abs(rawAmt);
       const match = matches.find((m) => m.bankTransactionId === t.id);
       const isMatched = matchedBankIds.has(t.id);
-
       if (!isMatched) unmatchedBankTotal += amt;
-
       bankCharges.push({
         id: t.id,
         date: formatDateForUI(new Date(t.date)),
         description: t.description,
         amount: amt,
-        source: sourceName, // <--- עדכון כאן
+        source: sourceName,
         isMatched,
         matchedToId: match?.creditTransactionId,
         matchedToDescription: match?.creditTransaction?.description,
       });
     } else if (!isCreditCardSummaryCharge && !isBankAccount) {
+      // תנועת אשראי: חיוב הוא שלילי (נציג כחיובי), זיכוי הוא חיובי (נציג כמקזז)
+      const effectiveCreditAmt = -rawAmt;
       const match = matches.find((m) => m.creditTransactionId === t.id);
       const isMatched = matchedCreditIds.has(t.id);
-
-      if (!isMatched && t.monthKey === monthKey) unmatchedCreditTotal += amt;
-
+      if (!isMatched && t.monthKey === monthKey) {
+        unmatchedCreditTotal += effectiveCreditAmt;
+      }
       const isPrevMonth = t.monthKey === previousMonthKey;
-
       creditDetails.push({
         id: t.id,
         date: formatDateForUI(new Date(t.date)),
-        description: `${t.description}${isPrevMonth ? ' (חודש קודם)' : ''}`,
-        amount: amt,
-        source: sourceName, // <--- עדכון כאן (sourceName במקום t.source)
+        description: `${t.description}${isPrevMonth ? " (חודש קודם)" : ""}`,
+        amount: effectiveCreditAmt,
+        source: sourceName,
         isMatched,
         matchedToId: match?.bankTransactionId,
         matchedToDescription: match?.bankTransaction?.description,
@@ -134,7 +137,7 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
 
   unmatchedBanks.forEach((b) => {
     const creditIndex = unmatchedCredits.findIndex(
-      (c) => Math.abs(c.amount - b.amount) < 0.01
+      (c) => Math.abs(c.amount - b.amount) < 0.01,
     );
 
     if (creditIndex !== -1) {
@@ -156,7 +159,11 @@ export async function getReconciliationData(monthKey: string): Promise<Reconcili
   };
 }
 
-export async function createMatchAction(bankTransactionId: string, creditTransactionId: string, monthKey: string) {
+export async function createMatchAction(
+  bankTransactionId: string,
+  creditTransactionId: string,
+  monthKey: string,
+) {
   await prisma.creditMatch.create({
     data: {
       monthKey,
@@ -165,14 +172,14 @@ export async function createMatchAction(bankTransactionId: string, creditTransac
     },
   });
 
-  revalidatePath('/reconciliation');
-  revalidatePath('/');
+  revalidatePath("/reconciliation");
+  revalidatePath("/");
 }
 
 // אישור גורף של כל ההצעות המוצעות בלחיצת כפתור אחת
 export async function applyAllSuggestedMatchesAction(
   suggestions: SuggestedMatch[],
-  monthKey: string
+  monthKey: string,
 ) {
   await Promise.all(
     suggestions.map((s) =>
@@ -182,15 +189,18 @@ export async function applyAllSuggestedMatchesAction(
           bankTransactionId: s.bankItem.id,
           creditTransactionId: s.creditItem.id,
         },
-      })
-    )
+      }),
+    ),
   );
 
-  revalidatePath('/reconciliation');
-  revalidatePath('/');
+  revalidatePath("/reconciliation");
+  revalidatePath("/");
 }
 
-export async function removeMatchAction(bankTransactionId: string, creditTransactionId: string) {
+export async function removeMatchAction(
+  bankTransactionId: string,
+  creditTransactionId: string,
+) {
   await prisma.creditMatch.deleteMany({
     where: {
       bankTransactionId,
@@ -198,6 +208,6 @@ export async function removeMatchAction(bankTransactionId: string, creditTransac
     },
   });
 
-  revalidatePath('/reconciliation');
-  revalidatePath('/');
+  revalidatePath("/reconciliation");
+  revalidatePath("/");
 }
