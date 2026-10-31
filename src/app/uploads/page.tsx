@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { 
-  getImportBatches, 
-  deleteImportBatchAction, 
-  deleteTransactionAction 
-} from '../actions/parse-file';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  getImportBatches,
+  deleteImportBatchAction,
+  deleteTransactionAction,
+} from "../actions/parse-file";
 
 export default function UploadsPage() {
   const [batches, setBatches] = useState<any[]>([]);
@@ -28,7 +28,12 @@ export default function UploadsPage() {
   }, []);
 
   const handleDeleteBatch = async (id: string, fileName: string) => {
-    if (!confirm(`האם למחוק את כל ההעלאה "${fileName}"? כל התנועות שנטענו בקובץ זה יימחקו.`)) return;
+    if (
+      !confirm(
+        `האם למחוק את כל ההעלאה "${fileName}"? כל התנועות שנטענו בקובץ זה יימחקו.`,
+      )
+    )
+      return;
     setLoading(true);
     try {
       await deleteImportBatchAction(id);
@@ -38,13 +43,16 @@ export default function UploadsPage() {
     }
   };
 
-  const handleDeleteSingleTransaction = async (txId: string, description: string) => {
+  const handleDeleteSingleTransaction = async (
+    txId: string,
+    description: string,
+  ) => {
     if (!confirm(`האם למחוק את התנועה "${description}"?`)) return;
     try {
       await deleteTransactionAction(txId);
       await loadBatches(); // רענון כדי לעדכן את הטבלה והכמות
     } catch (err) {
-      alert('שגיאה במחיקת התנועה');
+      alert("שגיאה במחיקת התנועה");
     }
   };
 
@@ -56,7 +64,9 @@ export default function UploadsPage() {
     <main className="min-h-screen bg-gray-50 py-10 px-4 sm:px-8 max-w-5xl mx-auto space-y-6">
       <header className="flex justify-between items-center border-b pb-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900">היסטוריית העלאות קבצים</h1>
+          <h1 className="text-3xl font-extrabold text-gray-900">
+            היסטוריית העלאות קבצים
+          </h1>
           <p className="text-gray-600 text-sm mt-1">
             מעקב וניהול אצוות היבוא. לחץ על קובץ לצפייה ומחיקת תנועות יחידות.
           </p>
@@ -71,8 +81,14 @@ export default function UploadsPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-800">קבצים שהועלו ({batches.length})</h2>
-          {loading && <span className="text-xs text-blue-600 font-semibold">מעדכן...</span>}
+          <h2 className="text-lg font-bold text-gray-800">
+            קבצים שהועלו ({batches.length})
+          </h2>
+          {loading && (
+            <span className="text-xs text-blue-600 font-semibold">
+              מעדכן...
+            </span>
+          )}
         </div>
 
         {batches.length === 0 ? (
@@ -88,18 +104,21 @@ export default function UploadsPage() {
               return (
                 <div key={b.id} className="bg-white transition">
                   {/* שורת האצווה/הקובץ */}
-                  <div 
+                  <div
                     onClick={() => toggleExpand(b.id)}
                     className="p-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-gray-400 text-xs font-bold">
-                        {isExpanded ? '▼' : '◄'}
+                        {isExpanded ? "▼" : "◄"}
                       </span>
                       <div>
-                        <p className="font-bold text-sm text-gray-900">{b.fileName || 'קובץ ללא שם'}</p>
+                        <p className="font-bold text-sm text-gray-900">
+                          {b.fileName || "קובץ ללא שם"}
+                        </p>
                         <p className="text-xs text-gray-500">
-                          {b.account?.name || b.provider} • {new Date(b.createdAt).toLocaleString('he-IL')}
+                          {b.account?.name || b.provider} •{" "}
+                          {new Date(b.createdAt).toLocaleString("he-IL")}
                         </p>
                       </div>
                     </div>
@@ -113,7 +132,7 @@ export default function UploadsPage() {
                         disabled={loading}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteBatch(b.id, b.fileName || 'קובץ');
+                          handleDeleteBatch(b.id, b.fileName || "קובץ");
                         }}
                         className="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-bold px-3 py-1.5 rounded transition disabled:opacity-50"
                       >
@@ -130,7 +149,9 @@ export default function UploadsPage() {
                       </h4>
 
                       {transactions.length === 0 ? (
-                        <p className="text-xs text-gray-400">אין תנועות בקובץ זה (או שכולן נמחקו).</p>
+                        <p className="text-xs text-gray-400">
+                          אין תנועות בקובץ זה (או שכולן נמחקו).
+                        </p>
                       ) : (
                         <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
                           <table className="w-full text-xs text-right text-gray-600">
@@ -146,13 +167,33 @@ export default function UploadsPage() {
                             <tbody className="divide-y divide-gray-100">
                               {transactions.map((tx: any) => (
                                 <tr key={tx.id} className="hover:bg-gray-50">
-                                  <td className="p-2.5">{new Date(tx.date).toLocaleDateString('he-IL')}</td>
-                                  <td className="p-2.5 font-medium text-gray-800">{tx.description}</td>
-                                  <td className="p-2.5 font-bold dir-ltr text-right">₪{Number(tx.amount).toFixed(2)}</td>
-                                  <td className="p-2.5">{tx.category?.name || 'ללא קטגוריה'}</td>
+                                  <td className="p-2.5">
+                                    {new Date(tx.date).toLocaleDateString(
+                                      "he-IL",
+                                    )}
+                                  </td>
+                                  <td className="p-2.5 font-medium text-gray-800">
+                                    {tx.description}
+                                  </td>
+                                  <td
+                                    dir="ltr"
+                                    className="p-2.5 font-bold text-right"
+                                  >
+                                    {Number(tx.amount) < 0
+                                      ? `-₪${Math.abs(Number(tx.amount)).toFixed(2)}`
+                                      : `₪${Number(tx.amount).toFixed(2)}`}
+                                  </td>
+                                  <td className="p-2.5">
+                                    {tx.category?.name || "ללא קטגוריה"}
+                                  </td>
                                   <td className="p-2.5 text-center">
                                     <button
-                                      onClick={() => handleDeleteSingleTransaction(tx.id, tx.description)}
+                                      onClick={() =>
+                                        handleDeleteSingleTransaction(
+                                          tx.id,
+                                          tx.description,
+                                        )
+                                      }
                                       className="text-red-500 hover:text-red-700 font-bold p-1"
                                       title="מחק תנועה זו בלבד"
                                     >

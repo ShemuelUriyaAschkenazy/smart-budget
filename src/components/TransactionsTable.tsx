@@ -1,9 +1,12 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { TransactionRow, toggleTransactionMaaserAction } from '../app/actions/parse-file';
-import { CategoryItem } from '../app/actions/categories-actions';
-import { createRuleAction } from '../app/actions/rules-actions';
+import { useState } from "react";
+import {
+  TransactionRow,
+  toggleTransactionMaaserAction,
+} from "../app/actions/parse-file";
+import { CategoryItem } from "../app/actions/categories-actions";
+import { createRuleAction } from "../app/actions/rules-actions";
 
 interface TableProps {
   transactions: TransactionRow[];
@@ -28,12 +31,16 @@ export default function TransactionsTable({
 
   if (!transactions || transactions.length === 0) return null;
 
-  const handleSelectChange = async (item: TransactionRow, newCatName: string) => {
+  const handleSelectChange = async (
+    item: TransactionRow,
+    newCatName: string,
+  ) => {
     if (!item.id || item.category === newCatName) return;
 
     await onCategoryChange(item.id, newCatName);
 
-    const isSuppressed = sessionStorage.getItem('suppressRulePrompt') === 'true';
+    const isSuppressed =
+      sessionStorage.getItem("suppressRulePrompt") === "true";
     if (isSuppressed) return;
 
     const matchedCat = categories.find((c) => c.name === newCatName);
@@ -47,7 +54,11 @@ export default function TransactionsTable({
   };
 
   // מעבר מחזורי: לפי קטגוריה (null) -> שינוי ידני להפך -> החזרה לקטגוריה
-  const handleToggleMaaser = async (item: TransactionRow, currentEffective: boolean, isOverridden: boolean) => {
+  const handleToggleMaaser = async (
+    item: TransactionRow,
+    currentEffective: boolean,
+    isOverridden: boolean,
+  ) => {
     if (!item.id) return;
 
     let newStatus: boolean | null;
@@ -55,7 +66,7 @@ export default function TransactionsTable({
 
     if (!isOverridden) {
       newStatus = !currentEffective;
-      const actionText = newStatus ? 'להוסיף לחישוב' : 'להסיר מחישוב';
+      const actionText = newStatus ? "להוסיף לחישוב" : "להסיר מחישוב";
       confirmMsg = `האם לקבוע עריכה ידנית: ${actionText} המעשר עבור:\n"${item.description}"?`;
     } else {
       newStatus = null; // איפוס בחזרה לירושה מהקטגוריה
@@ -73,9 +84,11 @@ export default function TransactionsTable({
 
     try {
       await createRuleAction(pendingRule.description, pendingRule.categoryId);
-      alert(`נוצר חוק חדש עבור "${pendingRule.description}" ⬅ ${pendingRule.categoryName}`);
+      alert(
+        `נוצר חוק חדש עבור "${pendingRule.description}" ⬅ ${pendingRule.categoryName}`,
+      );
     } catch (err: any) {
-      alert(err.message || 'שגיאה ביצירת החוק');
+      alert(err.message || "שגיאה ביצירת החוק");
     } finally {
       setPendingRule(null);
     }
@@ -83,7 +96,8 @@ export default function TransactionsTable({
 
   const handleCloseModal = (checkedDontAsk: boolean) => {
     if (checkedDontAsk) {
-      sessionStorage.getItem('suppressRulePrompt') && sessionStorage.setItem('suppressRulePrompt', 'true');
+      sessionStorage.getItem("suppressRulePrompt") &&
+        sessionStorage.setItem("suppressRulePrompt", "true");
     }
     setPendingRule(null);
   };
@@ -121,39 +135,66 @@ export default function TransactionsTable({
           </thead>
           <tbody>
             {transactions.map((item) => {
-              const isUncategorized = !item.category || item.category === 'ללא קטגוריה';
-              const matchedCat = categories.find((c) => c.name === item.category);
-              const showMaaserToggle = matchedCat?.type === 'income' || matchedCat?.type === 'donations';
+              const isUncategorized =
+                !item.category || item.category === "ללא קטגוריה";
+              const matchedCat = categories.find(
+                (c) => c.name === item.category,
+              );
+              const showMaaserToggle =
+                matchedCat?.type === "income" ||
+                matchedCat?.type === "donations";
 
               // זיהוי האם התנועה נערכה ידנית
-              const isOverridden = item.countInMaaser !== null && item.countInMaaser !== undefined;
-              const isCounted = isOverridden ? item.countInMaaser : (matchedCat?.countInMaaserDefault ?? false);
+              const isOverridden =
+                item.countInMaaser !== null && item.countInMaaser !== undefined;
+              const isCounted = isOverridden
+                ? item.countInMaaser
+                : (matchedCat?.countInMaaserDefault ?? false);
 
               return (
                 <tr
                   key={item.id}
                   className={`border-b transition ${
-                    isUncategorized ? 'bg-amber-50/40 hover:bg-amber-100/50' : 'bg-white hover:bg-gray-50'
+                    isUncategorized
+                      ? "bg-amber-50/40 hover:bg-amber-100/50"
+                      : "bg-white hover:bg-gray-50"
                   }`}
                 >
-                  <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">{item.date}</td>
-                  <td className="px-6 py-4">{item.description}</td>
-                  <td className="px-6 py-4 font-semibold text-gray-800 dir-ltr text-right">
-                    ₪{Number(item.amount).toFixed(2)}
+                  <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                    {item.date}
                   </td>
-                  <td className="px-6 py-4">{item.accountName || 'חשבון כללי'}</td>
+                  <td className="px-6 py-4">{item.description}</td>
+                  <td
+                    dir="ltr"
+                    className={`px-6 py-4 font-semibold text-right ${
+                      Number(item.amount) < 0
+                        ? "text-gray-800"
+                        : "text-emerald-600"
+                    }`}
+                  >
+                    {Number(item.amount) < 0
+                      ? `-₪${Math.abs(Number(item.amount)).toFixed(2)}`
+                      : `₪${Number(item.amount).toFixed(2)}`}
+                  </td>
+                  <td className="px-6 py-4">
+                    {item.accountName || "חשבון כללי"}
+                  </td>
                   <td className="px-6 py-4">
                     <select
-                      value={item.category || 'ללא קטגוריה'}
+                      value={item.category || "ללא קטגוריה"}
                       onChange={(e) => handleSelectChange(item, e.target.value)}
                       className={`border rounded-lg p-1.5 text-xs font-semibold focus:outline-none focus:ring-2 transition cursor-pointer ${
                         isUncategorized
-                          ? 'bg-amber-100 text-amber-800 border-amber-300 focus:ring-amber-400'
-                          : 'bg-emerald-50 text-emerald-800 border-emerald-300 focus:ring-emerald-400'
+                          ? "bg-amber-100 text-amber-800 border-amber-300 focus:ring-amber-400"
+                          : "bg-emerald-50 text-emerald-800 border-emerald-300 focus:ring-emerald-400"
                       }`}
                     >
                       {categories.map((c) => (
-                        <option key={c.id} value={c.name} className="bg-white text-gray-800 font-normal">
+                        <option
+                          key={c.id}
+                          value={c.name}
+                          className="bg-white text-gray-800 font-normal"
+                        >
                           {c.name}
                         </option>
                       ))}
@@ -162,20 +203,24 @@ export default function TransactionsTable({
                   <td className="px-6 py-4 text-center">
                     {showMaaserToggle ? (
                       <button
-                        onClick={() => handleToggleMaaser(item, !!isCounted, isOverridden)}
+                        onClick={() =>
+                          handleToggleMaaser(item, !!isCounted, isOverridden)
+                        }
                         className={`text-xs font-bold px-2.5 py-1 rounded transition border inline-flex items-center gap-1 ${
                           isCounted
-                            ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
-                            : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'
+                            ? "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200"
+                            : "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200"
                         }`}
                         title={
                           isOverridden
-                            ? 'נערך ידנית! לחץ שוב כדי לאפס לברירת המחדל של הקטגוריה'
-                            : 'מחושב לפי הקטגוריה. לחץ כדי לערוך ידנית'
+                            ? "נערך ידנית! לחץ שוב כדי לאפס לברירת המחדל של הקטגוריה"
+                            : "מחושב לפי הקטגוריה. לחץ כדי לערוך ידנית"
                         }
                       >
-                        {isOverridden && <span className="text-[10px]">✍️</span>}
-                        <span>{isCounted ? '🪙 מחושב' : 'לא מחושב'}</span>
+                        {isOverridden && (
+                          <span className="text-[10px]">✍️</span>
+                        )}
+                        <span>{isCounted ? "🪙 מחושב" : "לא מחושב"}</span>
                       </button>
                     ) : (
                       <span className="text-xs text-gray-300">-</span>
@@ -200,13 +245,16 @@ export default function TransactionsTable({
       {pendingRule && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100">
-            <h3 className="text-lg font-bold text-gray-900">האם ליצור חוק קבוע?</h3>
+            <h3 className="text-lg font-bold text-gray-900">
+              האם ליצור חוק קבוע?
+            </h3>
             <p className="text-sm text-gray-600">
-              הבחנת בשיוך התנועה <strong>"{pendingRule.description}"</strong> לקטגוריה{' '}
-              <strong>"{pendingRule.categoryName}"</strong>.
+              הבחנת בשיוך התנועה <strong>"{pendingRule.description}"</strong>{" "}
+              לקטגוריה <strong>"{pendingRule.categoryName}"</strong>.
             </p>
             <p className="text-xs text-gray-500">
-              יצירת חוק תבטיח שכל תנועה עתידית עם תיאור זה תסווג אוטומטית לקטגוריה זו.
+              יצירת חוק תבטיח שכל תנועה עתידית עם תיאור זה תסווג אוטומטית
+              לקטגוריה זו.
             </p>
 
             <div className="flex items-center gap-2 pt-2 border-t">
@@ -214,16 +262,23 @@ export default function TransactionsTable({
                 type="checkbox"
                 id="suppressPrompt"
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                onChange={(e) => ((window as any)._tempSuppress = e.target.checked)}
+                onChange={(e) =>
+                  ((window as any)._tempSuppress = e.target.checked)
+                }
               />
-              <label htmlFor="suppressPrompt" className="text-xs text-gray-600 cursor-pointer">
+              <label
+                htmlFor="suppressPrompt"
+                className="text-xs text-gray-600 cursor-pointer"
+              >
                 אל תשאל אותי שוב (תקף עד לרענון העמוד)
               </label>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
               <button
-                onClick={() => handleCloseModal(!!(window as any)._tempSuppress)}
+                onClick={() =>
+                  handleCloseModal(!!(window as any)._tempSuppress)
+                }
                 className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition"
               >
                 לא תודה
@@ -232,7 +287,7 @@ export default function TransactionsTable({
                 onClick={() => {
                   const suppress = !!(window as any)._tempSuppress;
                   if (suppress) {
-                    sessionStorage.setItem('suppressRulePrompt', 'true');
+                    sessionStorage.setItem("suppressRulePrompt", "true");
                   }
                   handleConfirmRule();
                 }}

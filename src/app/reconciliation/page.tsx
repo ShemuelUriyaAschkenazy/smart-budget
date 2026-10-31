@@ -1,16 +1,18 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   getReconciliationData,
   createMatchAction,
   removeMatchAction,
   applyAllSuggestedMatchesAction,
   ReconciliationOverview,
-} from '../actions/reconciliation-actions';
+} from "../actions/reconciliation-actions";
 
 export default function ReconciliationPage() {
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState<string>(() =>
+    new Date().toISOString().slice(0, 7),
+  );
   const [data, setData] = useState<ReconciliationOverview | null>(null);
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export default function ReconciliationPage() {
       const overview = await getReconciliationData(selectedMonth);
       setData(overview);
     } catch (err) {
-      console.error('שגיאה בטעינת נתוני התאמה:', err);
+      console.error("שגיאה בטעינת נתוני התאמה:", err);
     } finally {
       setSelectedBankId(null);
       setSelectedCreditId(null);
@@ -52,7 +54,11 @@ export default function ReconciliationPage() {
   };
 
   if (loading && !data) {
-    return <div className="p-8 text-center text-gray-500 text-sm">טוען נתוני התאמה...</div>;
+    return (
+      <div className="p-8 text-center text-gray-500 text-sm">
+        טוען נתוני התאמה...
+      </div>
+    );
   }
 
   if (!data) return null;
@@ -61,14 +67,19 @@ export default function ReconciliationPage() {
     <main className="min-h-screen bg-gray-50 py-10 px-4 sm:px-8 max-w-6xl mx-auto space-y-6">
       <header className="flex justify-between items-center flex-wrap gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div>
-          <h1 className="text-2xl font-black text-gray-900">🔗 התאמת אשראי ובנקים</h1>
+          <h1 className="text-2xl font-black text-gray-900">
+            🔗 התאמת אשראי ובנקים
+          </h1>
           <p className="text-gray-500 text-sm mt-1">
-            בקרת כיסוי פיננסית: קשר בין חיובי הבנק בחודש הנבחר לבין פירוט עסקאות האשראי.
+            בקרת כיסוי פיננסית: קשר בין חיובי הבנק בחודש הנבחר לבין פירוט עסקאות
+            האשראי.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-sm font-semibold text-gray-700">חודש חיוב בבנק:</label>
+          <label className="text-sm font-semibold text-gray-700">
+            חודש חיוב בבנק:
+          </label>
           <input
             type="month"
             value={selectedMonth}
@@ -106,8 +117,12 @@ export default function ReconciliationPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-4 rounded-xl border border-gray-100 flex justify-between items-center">
           <div>
-            <span className="text-xs font-bold text-gray-500 uppercase block">חיובי בנק ממתינים להתאמה</span>
-            <span className="text-xl font-black text-amber-600">₪{data.unmatchedBankTotal.toFixed(2)}</span>
+            <span className="text-xs font-bold text-gray-500 uppercase block">
+              חיובי בנק ממתינים להתאמה
+            </span>
+            <span className="text-xl font-black text-amber-600">
+              ₪{data.unmatchedBankTotal.toFixed(2)}
+            </span>
           </div>
           <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full">
             {data.bankCharges.filter((b) => !b.isMatched).length} תנועות
@@ -116,8 +131,12 @@ export default function ReconciliationPage() {
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 flex justify-between items-center">
           <div>
-            <span className="text-xs font-bold text-gray-500 uppercase block">עסקאות אשראי ממתינות (חודש זה + קודם)</span>
-            <span className="text-xl font-black text-blue-600">₪{data.unmatchedCreditTotal.toFixed(2)}</span>
+            <span className="text-xs font-bold text-gray-500 uppercase block">
+              עסקאות אשראי ממתינות (חודש זה + קודם)
+            </span>
+            <span className="text-xl font-black text-blue-600">
+              ₪{data.unmatchedCreditTotal.toFixed(2)}
+            </span>
           </div>
           <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
             {data.creditDetails.filter((c) => !c.isMatched).length} תנועות
@@ -128,7 +147,9 @@ export default function ReconciliationPage() {
       {/* כפתור פעולה מהירה לשיוך ידני */}
       {selectedBankId && selectedCreditId && (
         <div className="bg-blue-600 text-white p-4 rounded-xl shadow-lg flex justify-between items-center animate-bounce">
-          <span className="text-sm font-bold">נבחרו 2 תנועות לקישור. האם לאשר את ההתאמה?</span>
+          <span className="text-sm font-bold">
+            נבחרו 2 תנועות לקישור. האם לאשר את ההתאמה?
+          </span>
           <button
             onClick={handleMatch}
             className="bg-white text-blue-700 font-black px-6 py-2 rounded-lg hover:bg-blue-50 transition text-sm"
@@ -145,9 +166,13 @@ export default function ReconciliationPage() {
           <div className="p-4 bg-gray-50 border-b border-gray-100 font-bold text-gray-800 flex justify-between items-center">
             <div>
               <span className="block">1. חיובי אשראי שירדו בבנק</span>
-              <span className="text-xs text-gray-400 font-normal">חודש {selectedMonth} בלבד</span>
+              <span className="text-xs text-gray-400 font-normal">
+                חודש {selectedMonth} בלבד
+              </span>
             </div>
-            <span className="text-xs text-gray-500 font-normal">לחץ לבחירה לשיוך</span>
+            <span className="text-xs text-gray-500 font-normal">
+              לחץ לבחירה לשיוך
+            </span>
           </div>
 
           <div className="p-3 space-y-2 max-h-[500px] overflow-y-auto">
@@ -157,33 +182,49 @@ export default function ReconciliationPage() {
               </p>
             ) : (
               data.bankCharges.map((item) => {
-                const isSuggested = data.suggestedMatches.some((s) => s.bankItem.id === item.id);
+                const isSuggested = data.suggestedMatches.some(
+                  (s) => s.bankItem.id === item.id,
+                );
                 return (
                   <div
                     key={item.id}
-                    onClick={() => !item.isMatched && setSelectedBankId(selectedBankId === item.id ? null : item.id)}
+                    onClick={() =>
+                      !item.isMatched &&
+                      setSelectedBankId(
+                        selectedBankId === item.id ? null : item.id,
+                      )
+                    }
                     className={`p-3 rounded-lg border text-sm transition flex justify-between items-center cursor-pointer ${
                       item.isMatched
-                        ? 'bg-emerald-50/60 border-emerald-200 cursor-default'
+                        ? "bg-emerald-50/60 border-emerald-200 cursor-default"
                         : selectedBankId === item.id
-                        ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-300'
-                        : isSuggested
-                        ? 'bg-emerald-50/40 border-emerald-300'
-                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                          ? "bg-blue-50 border-blue-500 ring-2 ring-blue-300"
+                          : isSuggested
+                            ? "bg-emerald-50/40 border-emerald-300"
+                            : "bg-white border-gray-200 hover:bg-gray-50"
                     }`}
                   >
                     <div>
-                      <p className="font-bold text-gray-800">{item.description}</p>
-                      <p className="text-xs text-gray-400">{item.date} • {item.source}</p>
+                      <p className="font-bold text-gray-800">
+                        {item.description}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {item.date} • {item.source}
+                      </p>
                     </div>
 
                     <div className="text-left flex items-center gap-3">
-                      <span className="font-black text-gray-900 dir-ltr">₪{item.amount.toFixed(2)}</span>
+                      <span dir="ltr" className="font-black text-gray-900">
+                        {item.amount < 0
+                          ? `-₪${Math.abs(item.amount).toFixed(2)}`
+                          : `₪${item.amount.toFixed(2)}`}
+                      </span>
                       {item.isMatched ? (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (item.matchedToId) handleUnmatch(item.id, item.matchedToId);
+                            if (item.matchedToId)
+                              handleUnmatch(item.id, item.matchedToId);
                           }}
                           className="text-xs text-red-500 hover:underline font-bold"
                           title="בטל קישור"
@@ -212,9 +253,13 @@ export default function ReconciliationPage() {
           <div className="p-4 bg-gray-50 border-b border-gray-100 font-bold text-gray-800 flex justify-between items-center">
             <div>
               <span className="block">2. פירוט עסקאות אשראי שהועלו</span>
-              <span className="text-xs text-gray-400 font-normal">הצגת עסקאות מחודש זה והחודש שקדמה לו</span>
+              <span className="text-xs text-gray-400 font-normal">
+                הצגת עסקאות מחודש זה והחודש שקדמה לו
+              </span>
             </div>
-            <span className="text-xs text-gray-500 font-normal">לחץ לבחירה לשיוך</span>
+            <span className="text-xs text-gray-500 font-normal">
+              לחץ לבחירה לשיוך
+            </span>
           </div>
 
           <div className="p-3 space-y-2 max-h-[500px] overflow-y-auto">
@@ -224,36 +269,49 @@ export default function ReconciliationPage() {
               </p>
             ) : (
               data.creditDetails.map((item) => {
-                const isPrevMonth = item.description.includes('(חודש קודם)');
-                const isSuggested = data.suggestedMatches.some((s) => s.creditItem.id === item.id);
+                const isPrevMonth = item.description.includes("(חודש קודם)");
+                const isSuggested = data.suggestedMatches.some(
+                  (s) => s.creditItem.id === item.id,
+                );
                 return (
                   <div
                     key={item.id}
-                    onClick={() => !item.isMatched && setSelectedCreditId(selectedCreditId === item.id ? null : item.id)}
+                    onClick={() =>
+                      !item.isMatched &&
+                      setSelectedCreditId(
+                        selectedCreditId === item.id ? null : item.id,
+                      )
+                    }
                     className={`p-3 rounded-lg border text-sm transition flex justify-between items-center cursor-pointer ${
                       item.isMatched
-                        ? 'bg-emerald-50/60 border-emerald-200 cursor-default'
+                        ? "bg-emerald-50/60 border-emerald-200 cursor-default"
                         : selectedCreditId === item.id
-                        ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-300'
-                        : isSuggested
-                        ? 'bg-emerald-50/40 border-emerald-300'
-                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                          ? "bg-blue-50 border-blue-500 ring-2 ring-blue-300"
+                          : isSuggested
+                            ? "bg-emerald-50/40 border-emerald-300"
+                            : "bg-white border-gray-200 hover:bg-gray-50"
                     }`}
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="font-bold text-gray-800">{item.description}</p>
+                        <p className="font-bold text-gray-800">
+                          {item.description}
+                        </p>
                         {isPrevMonth && (
                           <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded">
                             חודש קודם
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400">{item.date} • {item.source}</p>
+                      <p className="text-xs text-gray-400">
+                        {item.date} • {item.source}
+                      </p>
                     </div>
 
                     <div className="text-left flex items-center gap-3">
-                      <span className="font-black text-gray-900 dir-ltr">₪{item.amount.toFixed(2)}</span>
+                      <span dir="ltr" className="font-black text-gray-900">
+                        ₪{item.amount.toFixed(2)}
+                      </span>
                       {item.isMatched ? (
                         <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
                           🔗 מקושר
